@@ -1,14 +1,9 @@
-# asm : Angular Spectrum Method
-
 CC       = gcc
 CFLAGS   = -g -O2 -Wall -Iutil
-LDFLAGS  = -lm -lfftw3 -lSDL2 -lSDL2_ttf  -lSDL2_mixer -lpng -ljpeg
+LDFLAGS  = -lm -lfftw3 -lSDL2 -lSDL2_ttf
 
-TARGET   = asm
-SOURCES  = asm.c display.c util/util_sdl.c util/util_misc.c \
-            util/util_png.c \
-            util/util_jpeg.c
-
+TARGET   = angular_spectrum_method
+SOURCES  = angular_spectrum_method.c display.c util/util_sdl.c util/util_misc.c 
 
 util/util_sdl.o: CFLAGS += $(shell sdl2-config --cflags)
 

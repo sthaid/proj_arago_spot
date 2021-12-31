@@ -1,3 +1,10 @@
+cleanup files
+simplify utils
+bring in latest util_sdl.c
+
+
+
+
 ======================================
 REFERENCES
 ======================================
@@ -94,6 +101,8 @@ http://www.fftw.org/fftw3.pdf
 
 https://rafael-fuente.github.io/simulating-diffraction-patterns-with-the-angular-spectrum-method-and-python.html
 https://rafael-fuente.github.io/simulating-diffraction-patterns-with-the-angular-spectrum-method-and-python.html
+
+it@github.com:rafael-fuente/diffractsim.gi
 
 
 ======================================

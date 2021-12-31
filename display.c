@@ -4,7 +4,7 @@
 // defines
 //
 
-#define DEFAULT_WIN_WIDTH  1920
+#define DEFAULT_WIN_WIDTH  1920  //xxx
 #define DEFAULT_WIN_HEIGHT 1080
 
 #define NM2MM(x) ((x) * 1e-6)
@@ -59,9 +59,11 @@ int display_init(bool swap_white_black_arg)
     swap_white_black = swap_white_black_arg;
 
     // init sdl, and get actual window width and height
-    win_width  = DEFAULT_WIN_WIDTH;
-    win_height = DEFAULT_WIN_HEIGHT;
-    if (sdl_init(&win_width, &win_height, true, swap_white_black) < 0) {
+    //win_width  = DEFAULT_WIN_WIDTH;
+    //win_height = DEFAULT_WIN_HEIGHT;
+    win_width  = 0;  //xxx
+    win_height = 0;
+    if (sdl_init(&win_width, &win_height, true, false, swap_white_black) < 0) {
         FATAL("sdl_init %dx%d failed\n", win_width, win_height);
     }
     INFO("REQUESTED win_width=%d win_height=%d\n", DEFAULT_WIN_WIDTH, DEFAULT_WIN_HEIGHT);
@@ -170,10 +172,10 @@ static int interferometer_diagram_pane_hndlr(pane_cx_t * pane_cx, int request, v
          (et) == ELEM_TYPE_SRC_RH   ? YELLOW     : \
          (et) == ELEM_TYPE_SRC_RING ? YELLOW     : \
          (et) == ELEM_TYPE_MIRROR   ? BLUE       : \
-         (et) == ELEM_TYPE_BEAM_SPL ? LIGHT_BLUE : \
+         (et) == ELEM_TYPE_BEAM_SPL ? SDL_LIGHT_BLUE : \
          (et) == ELEM_TYPE_SCREEN   ? PINK       : \
          (et) == ELEM_TYPE_DISCARD  ? RED        : \
-                                      WHITE)
+                                      SDL_WHITE)
 
     // ----------------------------
     // -------- INITIALIZE --------
@@ -227,13 +229,13 @@ static int interferometer_diagram_pane_hndlr(pane_cx_t * pane_cx, int request, v
         get_title(title_str);
         sdl_render_text(pane, 
                         pane->w/2 - COL2X(strlen(title_str),LARGE_FONT)/2, 0, 
-                        LARGE_FONT, title_str, WHITE, BLACK);
+                        LARGE_FONT, title_str, SDL_WHITE, SDL_BLACK);
 
         // display scale
         draw_scale(pane);
 
         // display element offset / info table
-        sdl_render_printf(pane, 0, ROW2Y(2,LARGE_FONT), LARGE_FONT, WHITE, BLACK,
+        sdl_render_printf(pane, 0, ROW2Y(2,LARGE_FONT), LARGE_FONT, SDL_WHITE, SDL_BLACK,
                           "    NAME   ID       X       Y     PAN    TILT FLAG");
         for (i = 0; i < current_config->max_element; i++) {
             struct element_s *elem = &current_config->element[i];
@@ -241,14 +243,14 @@ static int interferometer_diagram_pane_hndlr(pane_cx_t * pane_cx, int request, v
             int j;
 
             sdl_render_printf(pane, 0, ROW2Y(3+i,LARGE_FONT), LARGE_FONT, 
-                              ELEM_TYPE_TO_COLOR(elem->type), BLACK,
+                              ELEM_TYPE_TO_COLOR(elem->type), SDL_BLACK,
                               "%8s", elem->type_str);
 
             for (j = 0; j < elem->max_flags; j++) {
                 p += sprintf(p, "%d", ((elem->flags >> (elem->max_flags-1-j)) & 1));
             }
             sdl_render_printf(pane, COL2X(10,LARGE_FONT), ROW2Y(3+i,LARGE_FONT), LARGE_FONT, 
-                              elem == selected_elem ? ORANGE : WHITE, BLACK,
+                              elem == selected_elem ? ORANGE : SDL_WHITE, SDL_BLACK,
                               "%2d %7.3f %7.3f %7.3f %7.3f %4s",
                               i, 
                               elem->x_offset, elem->y_offset, 
@@ -265,33 +267,33 @@ static int interferometer_diagram_pane_hndlr(pane_cx_t * pane_cx, int request, v
         if (running) {
             sdl_render_text_and_register_event(
                     pane, pane->w-COL2X(14,LARGE_FONT), ROW2Y(1,LARGE_FONT), LARGE_FONT,
-                    "STOP", LIGHT_BLUE, BLACK,
+                    "STOP", SDL_LIGHT_BLUE, SDL_BLACK,
                     SDL_EVENT_SIM_STOP, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         } else {
             sdl_render_text_and_register_event(
                     pane, pane->w-COL2X(14,LARGE_FONT), ROW2Y(1,LARGE_FONT), LARGE_FONT,
-                    "RUN", LIGHT_BLUE, BLACK,
+                    "RUN", SDL_LIGHT_BLUE, SDL_BLACK,
                     SDL_EVENT_SIM_RUN, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         }
         // - reset_pan_zoom event: reset pan/zoom
         sdl_render_text_and_register_event(
                 pane, pane->w-COL2X(14,LARGE_FONT), ROW2Y(2,LARGE_FONT), LARGE_FONT,
-                "RESET_PAN_ZOOM", LIGHT_BLUE, BLACK,
+                "RESET_PAN_ZOOM", SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_RESET_PAN_ZOOM, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         // - randomize event: randomize element position and angle offsets
         sdl_render_text_and_register_event(
                 pane, pane->w-COL2X(14,LARGE_FONT), ROW2Y(3,LARGE_FONT), LARGE_FONT,
-                "RANDOMIZE", LIGHT_BLUE, BLACK,
+                "RANDOMIZE", SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_RANDOMIZE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         // - reset event: resets element offsets and diagram pan/zoom
         sdl_render_text_and_register_event(
                 pane, pane->w-COL2X(14,LARGE_FONT), ROW2Y(4,LARGE_FONT), LARGE_FONT,
-                "RESET_RANDOM", LIGHT_BLUE, BLACK,
+                "RESET_RANDOM", SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_RESET_RANDOM, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         // - save state event
         sdl_render_text_and_register_event(
                 pane, pane->w-COL2X(14,LARGE_FONT), ROW2Y(5,LARGE_FONT), LARGE_FONT,
-                "SAVE_STATE", LIGHT_BLUE, BLACK,
+                "SAVE_STATE", SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_SAVE_STATE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         // - element select events; both click on the element or click on the offset display line
         for (i = 0; i < current_config->max_element; i++) {
@@ -317,7 +319,7 @@ static int interferometer_diagram_pane_hndlr(pane_cx_t * pane_cx, int request, v
         if (microsec_timer() - msg.usec < 2000000) {
             sdl_render_printf(pane, 
                              pane->w-COL2X(14,LARGE_FONT), ROW2Y(7,LARGE_FONT), LARGE_FONT,
-                             msg.color, BLACK,
+                             msg.color, SDL_BLACK,
                              "%s", msg.str);
         }
 
@@ -508,19 +510,19 @@ static void draw_scale(rect_t *pane)
     ctr = pane->w / 2;
     y = pane->h - ROW2Y(2,LARGE_FONT);
 
-    sdl_render_line(pane, ctr-100, y, ctr+100, y, WHITE);
-    sdl_render_line(pane, ctr-100, y-5, ctr-100, y+5, WHITE);
-    sdl_render_line(pane, ctr+100, y-5, ctr+100, y+5, WHITE);
+    sdl_render_line(pane, ctr-100, y, ctr+100, y, SDL_WHITE);
+    sdl_render_line(pane, ctr-100, y-5, ctr-100, y+5, SDL_WHITE);
+    sdl_render_line(pane, ctr+100, y-5, ctr+100, y+5, SDL_WHITE);
 
     sprintf(str, "%.3f mm", 200/scale_pixel_per_mm);
     str_pixel_len = COL2X(strlen(str),LARGE_FONT);
-    sdl_render_printf(pane, ctr-str_pixel_len/2, y+10, LARGE_FONT, WHITE, BLACK, "%s", str);
+    sdl_render_printf(pane, ctr-str_pixel_len/2, y+10, LARGE_FONT, SDL_WHITE, SDL_BLACK, "%s", str);
 
     // draw vertical scale on centered on left
     ctr = pane->h * 3 / 4;
-    sdl_render_line(pane, 30, ctr-100, 30, ctr+100, WHITE);
-    sdl_render_line(pane, 25, ctr-100, 35, ctr-100, WHITE);
-    sdl_render_line(pane, 25, ctr+100, 35, ctr+100, WHITE);
+    sdl_render_line(pane, 30, ctr-100, 30, ctr+100, SDL_WHITE);
+    sdl_render_line(pane, 25, ctr-100, 35, ctr-100, SDL_WHITE);
+    sdl_render_line(pane, 25, ctr+100, 35, ctr+100, SDL_WHITE);
 }
 #endif
 
@@ -586,7 +588,7 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
 
         // render the sections that make up this pane, as described above
         render_interference_screen(0, MAX_SCREEN, screen, vars->texture, vars->pixels, pane);
-        sdl_render_line(pane, 0,MAX_SCREEN, MAX_SCREEN-1,MAX_SCREEN, WHITE);
+        sdl_render_line(pane, 0,MAX_SCREEN, MAX_SCREEN-1,MAX_SCREEN, SDL_WHITE);
         render_intensity_graph(MAX_SCREEN+1, 100, screen, pane);
         render_scale(MAX_SCREEN+101, 20, pane);
 
@@ -594,30 +596,30 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         sprintf(sensor_width_str, "W=%3.1f", sensor_width);
         sdl_render_text_and_register_event(
                 pane, 0, MAX_SCREEN+1, LARGE_FONT,
-                sensor_width_str, LIGHT_BLUE, BLACK,
+                sensor_width_str, SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_SENSOR_WIDTH, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(sensor_height_str, "H=%3.1f", sensor_height);
         sdl_render_text_and_register_event(
                 pane, COL2X(6,LARGE_FONT), MAX_SCREEN+1, LARGE_FONT,
-                sensor_height_str, LIGHT_BLUE, BLACK,
+                sensor_height_str, SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_SENSOR_HEIGHT, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sdl_render_text_and_register_event(
                 pane, MAX_SCREEN-COL2X(4,LARGE_FONT), MAX_SCREEN+1, LARGE_FONT,
-                "SENS", LIGHT_BLUE, BLACK,
+                "SENS", SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_SENSOR_LINES, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         sprintf(intensity_algorithm_str, "ALG=%d", intensity_algorithm);
         sdl_render_text_and_register_event(
                 pane, pane->w-COL2X(5,LARGE_FONT), 0, LARGE_FONT,
-                intensity_algorithm_str, LIGHT_BLUE, BLACK,
+                intensity_algorithm_str, SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_INTENSITY_ALGORITHM, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         sprintf(display_algorithm_str, "DSP=%d", display_algorithm);
         sdl_render_text_and_register_event(
                 pane, pane->w-COL2X(5,LARGE_FONT), ROW2Y(1,LARGE_FONT), LARGE_FONT,
-                display_algorithm_str, LIGHT_BLUE, BLACK,
+                display_algorithm_str, SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_DISPLAY_ALGORITHM, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         return PANE_HANDLER_RET_NO_ACTION;
@@ -735,7 +737,7 @@ static void render_intensity_graph(
         graph[screen_idx].x = screen_idx;
         graph[screen_idx].y = y_bottom - get_sensor_value(screen_idx,screen) * y_span;
     }
-    sdl_render_lines(pane, graph, MAX_SCREEN, WHITE);
+    sdl_render_lines(pane, graph, MAX_SCREEN, SDL_WHITE);
 
     // draw horizontal lines accross middle to represent the top and bottom of the sensor
     if (sensor_lines_enabled) {
@@ -745,8 +747,8 @@ static void render_intensity_graph(
 
         sensor_min_y = MAX_SCREEN/2 - sensor_height_pixels/2;
         sensor_max_y = sensor_min_y + sensor_height_pixels - 1;
-        sdl_render_line(pane, 0, sensor_min_y, MAX_SCREEN-1, sensor_min_y, WHITE);
-        sdl_render_line(pane, 0, sensor_max_y, MAX_SCREEN-1, sensor_max_y, WHITE);
+        sdl_render_line(pane, 0, sensor_min_y, MAX_SCREEN-1, sensor_min_y, SDL_WHITE);
+        sdl_render_line(pane, 0, sensor_max_y, MAX_SCREEN-1, sensor_max_y, SDL_WHITE);
     }
 }
 
@@ -773,7 +775,7 @@ static void render_scale(int y_top, int y_span, rect_t *pane)
         if (tick_loc < 5 || tick_loc >= MAX_SCREEN-5) continue;
 
         // render the tick
-        sdl_render_line(pane, nearbyint(tick_loc), y_top, nearbyint(tick_loc), y_top+5, WHITE);
+        sdl_render_line(pane, nearbyint(tick_loc), y_top, nearbyint(tick_loc), y_top+5, SDL_WHITE);
 
         // determine the tick value (in mm), and display it centered below the tick
         // - determine the tick_value based on the difference between tick_loc and the center
@@ -786,17 +788,17 @@ static void render_scale(int y_top, int y_span, rect_t *pane)
         // - render the tick value
         sdl_render_text(pane, 
                         tick_value_loc, y_top+5,
-                        SMALL_FONT, tick_value_str, WHITE, BLACK);
+                        SMALL_FONT, tick_value_str, SDL_WHITE, SDL_BLACK);
     }
 
     // render the axis line
-    sdl_render_line(pane, 0,y_top, MAX_SCREEN-1,y_top, WHITE);
+    sdl_render_line(pane, 0,y_top, MAX_SCREEN-1,y_top, SDL_WHITE);
 
     // display the screen diameter at the top of the pane
     sprintf(screen_diam_str, "SCREEN DIAMETER %g mm", MAX_SCREEN*SCREEN_ELEMENT_SIZE);
     sdl_render_text(pane, 
                     (pane->w-COL2X(strlen(screen_diam_str),LARGE_FONT))/2, 0, 
-                    LARGE_FONT, screen_diam_str, WHITE, BLACK);
+                    LARGE_FONT, screen_diam_str, SDL_WHITE, SDL_BLACK);
 }
 
 #if 0
@@ -840,7 +842,7 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
             sdl_render_text_and_register_event(
                     pane, 0, ROW2Y(row,LARGE_FONT), LARGE_FONT,
                     config[i].name, 
-                    current_config == &config[i] ? GREEN : LIGHT_BLUE, BLACK,
+                    current_config == &config[i] ? GREEN : SDL_LIGHT_BLUE, SDL_BLACK,
                     SDL_EVENT_SIM_CFGSEL+i, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         }
 
@@ -950,7 +952,7 @@ static int interference_pattern_graph_pane_hndlr(pane_cx_t * pane_cx, int reques
             graph[max_graph].x = pane->w - 1 - get_sensor_value(screen_idx,screen) * (pane->w);
             max_graph++;
         }
-        sdl_render_lines(pane, graph, max_graph, WHITE);
+        sdl_render_lines(pane, graph, max_graph, SDL_WHITE);
 
         // and repeat draw graph of sensor_value, offset by 1 to
         // approximate a double width line
@@ -964,18 +966,18 @@ static int interference_pattern_graph_pane_hndlr(pane_cx_t * pane_cx, int reques
             graph[max_graph].x = pane->w - 1 - get_sensor_value(screen_idx,screen) * (pane->w);
             max_graph++;
         }
-        sdl_render_lines(pane, graph, max_graph, WHITE);
+        sdl_render_lines(pane, graph, max_graph, SDL_WHITE);
 
         // display title
         get_title(title_str);
         sdl_render_text(pane,
                         pane->w/2 - COL2X(strlen(title_str),LARGE_FONT)/2, 0,
-                        LARGE_FONT, title_str, WHITE, BLACK);
+                        LARGE_FONT, title_str, SDL_WHITE, SDL_BLACK);
 
         // print the graph_size
         sdl_render_printf(
                 pane, pane->w/2-COL2X(18,LARGE_FONT)/2, ROW2Y(1,LARGE_FONT), LARGE_FONT,
-                WHITE, BLACK,
+                SDL_WHITE, SDL_BLACK,
                 "GRAPH_SIZE = %d mm", vars->graph_size);
 
         // register for zoom events
