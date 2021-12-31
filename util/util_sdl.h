@@ -10,22 +10,43 @@
 //
 
 // colors
-#define PURPLE     0 
-#define BLUE       1
-#define LIGHT_BLUE 2
-#define GREEN      3
-#define YELLOW     4
-#define ORANGE     5
-#define PINK       6
-#define RED        7
-#define GRAY       8
-#define WHITE      9
-#define BLACK      10
+#define SDL_PURPLE     0 
+#define SDL_BLUE       1
+#define SDL_LIGHT_BLUE 2
+#define SDL_GREEN      3
+#define SDL_YELLOW     4
+#define SDL_ORANGE     5
+#define SDL_PINK       6
+#define SDL_RED        7
+#define SDL_GRAY       8
+#define SDL_WHITE      9
+#define SDL_BLACK      10
 
-// number of bytes per pixel
-#define BYTES_PER_PIXEL   4
+// pixels
+#define BYTES_PER_PIXEL  4
+#define PIXEL(r,g,b)     (((r) << 0) | ((g) << 8) | ((b) << 16) | (255 << 24))
+#define PIXEL_PURPLE     PIXEL(127,0,255)
+#define PIXEL_BLUE       PIXEL(0,0,255)
+#define PIXEL_LIGHT_BLUE PIXEL(0,255,255)
+#define PIXEL_GREEN      PIXEL(0,255,0)
+#define PIXEL_YELLOW     PIXEL(255,255,0)
+#define PIXEL_ORANGE     PIXEL(255,128,0)
+#define PIXEL_PINK       PIXEL(255,105,180)
+#define PIXEL_RED        PIXEL(255,0,0)
+#define PIXEL_GRAY       PIXEL(224,224,224)
+#define PIXEL_WHITE      PIXEL(255,255,255)
+#define PIXEL_BLACK      PIXEL(0,0,0)
 
-// xxx
+#define PIXEL_TO_RGB(p,r,g,b) \
+    do { \
+        r = ((p) >>  0) & 0xff; \
+        g = ((p) >>  8) & 0xff; \
+        b = ((p) >> 16) & 0xff; \
+    } while (0)
+
+#define FIRST_SDL_CUSTOM_COLOR 20
+
+// convert font_ptsize to pixels
 #define COL2X(c,font_ptsize)   ((c) * sdl_font_char_width(font_ptsize))
 #define ROW2Y(r,font_ptsize)   ((r) * sdl_font_char_height(font_ptsize))
 
@@ -62,6 +83,7 @@ typedef void * texture_t;
 //   . if ctrl is active then SDL_EVENT_KEY_CTRL is added to the event_id value
 //   . if alt is active then SDL_EVENT_KEY_ALT is added to the event_id value
 #define SDL_EVENT_KEY_ESC                0x1b
+#define SDL_EVENT_KEY_DELETE             0x7f
 #define SDL_EVENT_KEY_INSERT             0x101
 #define SDL_EVENT_KEY_HOME               0x102
 #define SDL_EVENT_KEY_END                0x103
@@ -75,6 +97,7 @@ typedef void * texture_t;
 #define SDL_EVENT_KEY_SHIFT_DOWN_ARROW   0x10b
 #define SDL_EVENT_KEY_SHIFT_LEFT_ARROW   0x10c
 #define SDL_EVENT_KEY_SHIFT_RIGHT_ARROW  0x10d
+#define SDL_EVENT_KEY_F(n)               (0x10f+(n))  // n=1...12
 #define SDL_EVENT_KEY_CTRL               0x1000
 #define SDL_EVENT_KEY_ALT                0x2000
 // - window events
@@ -103,6 +126,12 @@ typedef struct {
         struct {
             int32_t delta_x;
             int32_t delta_y;
+            int32_t x;
+            int32_t y;
+            bool start;
+            bool end;
+            int32_t end_abs_total_delta_x;
+            int32_t end_abs_total_delta_y;
         } mouse_motion;
         struct {
             int32_t delta_x;
@@ -149,9 +178,12 @@ typedef struct pane_cx_s {
 // PROTOTYPES
 //
 
-// sdl initialize
-int32_t sdl_init(int32_t * w, int32_t * h, bool resizeable, bool swap_white_black);
+// sdl initialize, and misc routines
+int32_t sdl_init(int32_t * w, int32_t * h, bool fullscreen, bool resizeable, bool swap_white_black);
+void sdl_get_window_size(int32_t * w, int32_t * h);
 void sdl_get_max_texture_dim(int32_t * max_texture_dim);
+void sdl_full_screen(bool enable);
+void sdl_minimize_window(void);
 
 // pane support
 void sdl_pane_manager(void *display_cx,                        // optional, context
@@ -163,10 +195,8 @@ void sdl_pane_manager(void *display_cx,                        // optional, cont
 void sdl_pane_create(struct pane_list_head_s * pane_list_head, pane_handler_t pane_handler, void * init,
                      int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, 
                      int32_t border_style, void * display_cx);
-rect_t sdl_init_pane(int32_t x_disp, int32_t y_disp, int32_t w, int32_t h,
-                     int32_t border_style, int32_t border_color, bool clear,
-                     rect_t * loc_full_pane, rect_t * loc_bar_move, rect_t * loc_bar_x);
-rect_t sdl_get_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, int32_t border_style);
+void sdl_pane_update(pane_cx_t *pane_cx,
+                     int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total);
 
 // display init and present
 void sdl_display_init(int32_t * win_width, int32_t * win_height, bool * win_minimized);
@@ -213,6 +243,7 @@ void sdl_update_texture(texture_t texture, uint8_t * pixels, int32_t pitch);
 void sdl_query_texture(texture_t texture, int32_t * width, int32_t * height);
 rect_t sdl_render_texture(rect_t * pane, int32_t x, int32_t y, texture_t texture);
 rect_t sdl_render_scaled_texture(rect_t * pane, rect_t * loc, texture_t texture);
+void sdl_render_scaled_texture_ex(rect_t *pane, rect_t *src, rect_t *dst, texture_t texture);
 void sdl_destroy_texture(texture_t texture);
 
 // render using textures - webcam support
@@ -225,7 +256,9 @@ void sdl_update_iyuv_texture(texture_t texture, uint8_t *y_plane, int y_pitch,
 // print screen, file_name must end in .jpg or .png
 void sdl_print_screen(char * file_name, bool flash_display, rect_t * rect);
 
-// misc
+// colors
+void sdl_define_custom_color(int32_t color, uint8_t r, uint8_t g, uint8_t b);
+void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b);
 int32_t sdl_color(char * color_str);
 
 #endif

@@ -14,22 +14,38 @@
 
 #include <sys/stat.h>
 
+//#define ENABLE_UTIL_SDL_BUTTON_SOUND
+//#define ENABLE_PRINT_SCREEN
+
 #include <SDL.h>
 #include <SDL_ttf.h>
+#ifdef ENABLE_UTIL_SDL_BUTTON_SOUND
 #include <SDL_mixer.h>
+#endif
 
 #include "util_sdl.h"
+#include "util_misc.h"
+#ifdef ENABLE_UTIL_SDL_BUTTON_SOUND
 #include "util_sdl_button_sound.h"
+#endif
+#ifdef ENABLE_PRINT_SCREEN
 #include "util_png.h"
 #include "util_jpeg.h"
-#include "util_misc.h"
+#endif
 
 //
 // defines
 //
 
-#define MAX_FONT_PTSIZE   200
-#define MAX_EVENT_REG_TBL 1000
+#define MAX_FONT_PTSIZE       200
+#define MAX_EVENT_REG_TBL     1000
+#define MAX_SDL_COLOR_TO_RGBA 1000
+
+#ifndef ANDROID
+#define FONT_PATH "assets/fonts/FreeMonoBold.ttf"
+#else
+#define FONT_PATH "fonts/FreeMonoBold.ttf"
+#endif
 
 #define min(a,b) \
    ({ __typeof__ (a) _a = (a); \
@@ -51,6 +67,7 @@ typedef struct {
     int32_t event_type;
     void * event_cx;
     rect_t disp_loc;
+    rect_t pane;
 } sdl_event_reg_t;
 
 //
@@ -65,10 +82,11 @@ static int32_t          sdl_win_height;
 static bool             sdl_win_minimized;
 static bool             sdl_program_quit;
 
+#ifdef ENABLE_UTIL_SDL_BUTTON_SOUND
 static Mix_Chunk      * sdl_button_sound;
+#endif
 
 static sdl_font_t       sdl_font[MAX_FONT_PTSIZE];
-static char           * sdl_font_path;
 
 static sdl_event_reg_t  sdl_event_reg_tbl[MAX_EVENT_REG_TBL];
 static int32_t          sdl_event_max;
@@ -77,19 +95,18 @@ static sdl_event_t      sdl_push_ev;
 static struct pane_list_head_s * sdl_pane_list_head[10];
 static int              sdl_pane_list_head_idx;
 
-static uint32_t         sdl_color_to_rgba[] = {
-                            //    red           green          blue    alpha
-                               (127 << 0) | (  0 << 8) | (255 << 16) | (255 << 24),  // PURPLE
-                               (  0 << 0) | (  0 << 8) | (255 << 16) | (255 << 24),  // BLUE
-                               (  0 << 0) | (255 << 8) | (255 << 16) | (255 << 24),  // LIGHT_BLUE
-                               (  0 << 0) | (255 << 8) | (  0 << 16) | (255 << 24),  // GREEN
-                               (255 << 0) | (255 << 8) | (  0 << 16) | (255 << 24),  // YELLOW
-                               (255 << 0) | (128 << 8) | (  0 << 16) | (255 << 24),  // ORANGE
-                               (255 << 0) | (105 << 8) | (180 << 16) | (255 << 24),  // PINK 
-                               (255 << 0) | (  0 << 8) | (  0 << 16) | (255 << 24),  // RED         
-                               (224 << 0) | (224 << 8) | (224 << 16) | (255 << 24),  // GRAY        
-                               (255 << 0) | (255 << 8) | (255 << 16) | (255 << 24),  // WHITE       
-                               (  0 << 0) | (  0 << 8) | (  0 << 16) | (255 << 24),  // BLACK       
+static uint32_t         sdl_color_to_rgba[MAX_SDL_COLOR_TO_RGBA] = {
+                            PIXEL_PURPLE, 
+                            PIXEL_BLUE, 
+                            PIXEL_LIGHT_BLUE, 
+                            PIXEL_GREEN, 
+                            PIXEL_YELLOW, 
+                            PIXEL_ORANGE, 
+                            PIXEL_PINK, 
+                            PIXEL_RED, 
+                            PIXEL_GRAY, 
+                            PIXEL_WHITE, 
+                            PIXEL_BLACK, 
                                         };
 
 //
@@ -101,11 +118,18 @@ static void set_color(int32_t color);
 static void font_init(int32_t ptsize);
 static void pane_terminate(struct pane_list_head_s * pane_list_head, pane_cx_t * pane_cx);
 static int32_t pane_move_speed(void);
+static rect_t init_pane(int32_t x_disp, int32_t y_disp, int32_t w, int32_t h,
+                        int32_t border_style, int32_t border_color, bool clear,
+                        rect_t * loc_full_pane, rect_t * loc_bar_move, rect_t * loc_bar_x);
+static rect_t get_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, 
+                       int32_t border_style);
 static int find_1_intersect(point_t *p1, point_t *p2, rect_t *pane, point_t *p_intersect);
 static int find_n_intersect(point_t *p1, point_t *p2, rect_t *pane, point_t *p_intersect);
 static int find_x_intersect(point_t *p1, point_t *p2, double X, point_t *p_intersect);
 static int find_y_intersect(point_t *p1, point_t *p2, double Y, point_t *p_intersect);
+#ifdef ENABLE_PRINT_SCREEN
 static char *print_screen_filename(void);
+#endif
 
 // 
 // inline procedures
@@ -122,15 +146,8 @@ static inline uint32_t _bswap32(uint32_t a)
 
 // -----------------  SDL INIT & MISC ROUTINES  ------------------------- 
 
-int32_t sdl_init(int32_t *w, int32_t *h, bool resizeable, bool swap_white_black)
+int32_t sdl_init(int32_t *w, int32_t *h, bool fullscreen, bool resizeable, bool swap_white_black)
 {
-    #define SDL_FLAGS (resizeable ? SDL_WINDOW_RESIZABLE : 0)
-    #define MAX_FONT_SEARCH_PATH 3
-
-    static char font_search_path[MAX_FONT_SEARCH_PATH][PATH_MAX];
-
-    static const char * font_filename = "FreeMonoBold.ttf";
-
     // display available and current video drivers
     int num, i;
     num = SDL_GetNumVideoDrivers();
@@ -146,21 +163,41 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool resizeable, bool swap_white_black)
     }
 
     // create SDL Window and Renderer
+#ifndef ANDROID
+    #define SDL_FLAGS ((resizeable ? SDL_WINDOW_RESIZABLE : 0) | \
+                       (fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0))
+    if (fullscreen) {
+        *w = *h = 0;
+    }
     if (SDL_CreateWindowAndRenderer(*w, *h, SDL_FLAGS, &sdl_window, &sdl_renderer) != 0) {
         ERROR("SDL_CreateWindowAndRenderer failed\n");
         return -1;
     }
-
-    // the size of the created window may be different than what was requested
-    // - call sdl_poll_event to flush all of the initial events,
-    //   and especially to process the SDL_WINDOWEVENT_SIZE_CHANGED event
-    //   which will update sdl_win_width and sdl_win_height
-    // - return the updated window width & height to caller
     sdl_poll_event();
-    DEBUG("sdl_win_width=%d sdl_win_height=%d\n", sdl_win_width, sdl_win_height);
-    *w = sdl_win_width;
-    *h = sdl_win_height;
+#else
+    if (SDL_CreateWindowAndRenderer(0, 0, SDL_WINDOW_FULLSCREEN, &sdl_window, &sdl_renderer) != 0) {
+        ERROR("SDL_CreateWindowAndRenderer failed\n");
+        return -1;
+    }
+    for (i = 0; i < 50; i++) {
+        sdl_event_t *event;
+        event = sdl_poll_event();
+        if (event->event_id == SDL_EVENT_WIN_SIZE_CHANGE) {
+            INFO("got SDL_EVENT_WIN_SIZE_CHANGE, i = %d\n", i);
+            break;
+        }
+        usleep(10000);
+    }
+#endif
 
+    // get the actual window size, which will be returned to caller and
+    // also saved in vars sdl_win_width/height
+    SDL_GetWindowSize(sdl_window, w, h);
+    sdl_win_width  = *w;
+    sdl_win_height = *h;
+    INFO("sdl_win_width=%d sdl_win_height=%d\n", sdl_win_width, sdl_win_height);
+
+#ifdef ENABLE_UTIL_SDL_BUTTON_SOUND
     // init button_sound
     if (Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 2, 4096) < 0) {
         WARN("Mix_OpenAudio failed\n");
@@ -172,6 +209,7 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool resizeable, bool swap_white_black)
         }
         Mix_VolumeChunk(sdl_button_sound,MIX_MAX_VOLUME/2);
     }
+#endif
 
     // initialize True Type Font
     if (TTF_Init() < 0) {
@@ -179,35 +217,15 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool resizeable, bool swap_white_black)
         return -1;
     }
 
-    // determine sdl_font_path by searching for FreeMonoBold.ttf font file in possible locations
-    // note - fonts can be installed using:
-    //   sudo yum install gnu-free-mono-fonts       # rhel,centos,fedora
-    //   sudo apt-get install fonts-freefont-ttf    # raspberrypi, ubuntu
-    sprintf(font_search_path[0], "%s/%s", "/usr/share/fonts/gnu-free", font_filename);
-    sprintf(font_search_path[1], "%s/%s", "/usr/share/fonts/truetype/freefont", font_filename);
-    sprintf(font_search_path[2], "%s/%s/%s", getenv("HOME"), "my_fonts", font_filename);
-    for (i = 0; i < MAX_FONT_SEARCH_PATH; i++) {
-        struct stat buf;
-        sdl_font_path = font_search_path[i];
-        if (stat(sdl_font_path, &buf) == 0) {
-            break;
-        }
-    }
-    if (i == MAX_FONT_SEARCH_PATH) {
-        ERROR("failed to locate font file\n");
-        return -1;
-    }
-    DEBUG("using font %s\n", sdl_font_path);
-
     // currently the SDL Text Input feature is not being used here
     SDL_StopTextInput();
 
     // if caller requests swap_white_black then swap the white and black
     // entries of the sdl_color_to_rgba table
     if (swap_white_black) {
-        uint32_t tmp = sdl_color_to_rgba[WHITE];
-        sdl_color_to_rgba[WHITE] = sdl_color_to_rgba[BLACK];
-        sdl_color_to_rgba[BLACK] = tmp;
+        uint32_t tmp = sdl_color_to_rgba[SDL_WHITE];
+        sdl_color_to_rgba[SDL_WHITE] = sdl_color_to_rgba[SDL_BLACK];
+        sdl_color_to_rgba[SDL_BLACK] = tmp;
     }
 
     // register exit handler
@@ -218,25 +236,17 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool resizeable, bool swap_white_black)
     return 0;
 }
 
-static void exit_handler(void)
+void sdl_get_window_size(int32_t *w, int32_t *h)
 {
-    int32_t i;
-    
-    if (sdl_button_sound) {
-        Mix_FreeChunk(sdl_button_sound);
-        Mix_CloseAudio();
-    }
+    *w = sdl_win_width;
+    *h = sdl_win_height;
+}
 
-    for (i = 0; i < MAX_FONT_PTSIZE; i++) {
-        if (sdl_font[i].font != NULL) {
-            TTF_CloseFont(sdl_font[i].font);
-        }
-    }
-    TTF_Quit();
-
-    SDL_DestroyRenderer(sdl_renderer);
-    SDL_DestroyWindow(sdl_window);
-    SDL_Quit();
+void sdl_full_screen(bool enable)
+{
+#ifndef ANDROID
+    SDL_SetWindowFullscreen(sdl_window, enable ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+#endif
 }
 
 void sdl_get_max_texture_dim(int32_t * max_texture_dim)
@@ -256,16 +266,45 @@ void sdl_get_max_texture_dim(int32_t * max_texture_dim)
                            sdl_renderer_info.max_texture_height);
 }
 
+static void exit_handler(void)
+{
+    int32_t i;
+    
+#ifdef ENABLE_UTIL_SDL_BUTTON_SOUND
+    if (sdl_button_sound) {
+        Mix_FreeChunk(sdl_button_sound);
+        Mix_CloseAudio();
+    }
+#endif
+
+    for (i = 0; i < MAX_FONT_PTSIZE; i++) {
+        if (sdl_font[i].font != NULL) {
+            TTF_CloseFont(sdl_font[i].font);
+        }
+    }
+    TTF_Quit();
+
+    SDL_DestroyRenderer(sdl_renderer);
+    SDL_DestroyWindow(sdl_window);
+    SDL_Quit();
+}
+
 static void set_color(int32_t color)
 {
     uint8_t r, g, b, a;
     uint32_t rgba;
 
+    if (color < 0 || color >= MAX_SDL_COLOR_TO_RGBA) {
+        FATAL("color %d out of range\n", color);
+    }
+
     rgba = sdl_color_to_rgba[color];
+    
     r = (rgba >>  0) & 0xff;
     g = (rgba >>  8) & 0xff;
     b = (rgba >> 16) & 0xff;
     a = (rgba >> 24) & 0xff;
+
     SDL_SetRenderDrawColor(sdl_renderer, r, g, b, a);
 }
 
@@ -277,16 +316,20 @@ static void font_init(int32_t font_ptsize)
     }
 
     // open font for this font_ptsize,
-    assert(sdl_font_path);
-    sdl_font[font_ptsize].font = TTF_OpenFont(sdl_font_path, font_ptsize);
+    sdl_font[font_ptsize].font = TTF_OpenFont(FONT_PATH, font_ptsize);
     if (sdl_font[font_ptsize].font == NULL) {
-        FATAL("failed TTF_OpenFont(%s,%d)\n", sdl_font_path, font_ptsize);
+        FATAL("failed TTF_OpenFont(%s,%d)\n", FONT_PATH, font_ptsize);
     }
 
     // and init the char_width / char_height
     TTF_SizeText(sdl_font[font_ptsize].font, "X", &sdl_font[font_ptsize].char_width, &sdl_font[font_ptsize].char_height);
     DEBUG("font_ptsize=%d width=%d height=%d\n",
          font_ptsize, sdl_font[font_ptsize].char_width, sdl_font[font_ptsize].char_height);
+}
+
+void sdl_minimize_window(void)
+{
+    SDL_MinimizeWindow(sdl_window);
 }
 
 // -----------------  PANE MANAGER  ------------------------------------- 
@@ -360,11 +403,11 @@ void sdl_pane_manager(void *display_cx,                        // optional, cont
         for (pane_cx = TAILQ_FIRST(&pane_list_head); pane_cx != NULL; pane_cx = pane_cx_next) {
             pane_cx_next = TAILQ_NEXT(pane_cx, entries);
 
-            pane_cx->pane = sdl_init_pane(pane_cx->x_disp, pane_cx->y_disp, pane_cx->w_total, pane_cx->h_total,
-                                          pane_cx->border_style, 
-                                          pane_cx == FG_PANE_CX ? GREEN : BLUE,  
-                                          true,   // clear
-                                          &loc_full_pane, &loc_bar_move, &loc_bar_terminate);
+            pane_cx->pane = init_pane(pane_cx->x_disp, pane_cx->y_disp, pane_cx->w_total, pane_cx->h_total,
+                                      pane_cx->border_style, 
+                                      pane_cx == FG_PANE_CX ? SDL_GREEN : SDL_BLUE,  
+                                      true,   // clear
+                                      &loc_full_pane, &loc_bar_move, &loc_bar_terminate);
 
             sdl_register_event(&pane_cx->pane, &loc_full_pane, SDL_EVENT_PANE_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
             sdl_register_event(&pane_cx->pane, &loc_full_pane, SDL_EVENT_PANE_BACKGROUND, SDL_EVENT_TYPE_MOUSE_RIGHT_CLICK, pane_cx);
@@ -408,10 +451,12 @@ void sdl_pane_manager(void *display_cx,                        // optional, cont
                     } else if (event->event_id == SDL_EVENT_KEY_ALT + 'x') {  // ALT-x: terminate pane
                         pane_terminate(&pane_list_head, FG_PANE_CX);
                         redraw = true;
+#ifdef ENABLE_PRINT_SCREEN
                     } else if (event->event_id == SDL_EVENT_KEY_ALT + 'p'  || // ALT-p: print screen
                                event->event_id == SDL_EVENT_KEY_CTRL + 'p') { // CTRL-p: print screen
                         sdl_print_screen(print_screen_filename(),true,NULL);
                         redraw = true;
+#endif
                     } else if (event->event_id == SDL_EVENT_KEY_ALT + SDL_EVENT_KEY_UP_ARROW) {  // ALT+arrow: move pane
                         FG_PANE_CX->y_disp -= pane_move_speed();
                         redraw = true;
@@ -529,7 +574,7 @@ void sdl_pane_create(struct pane_list_head_s * pane_list_head, pane_handler_t pa
     pane_cx->w_total        = w_total;
     pane_cx->h_total        = h_total;
     pane_cx->border_style   = border_style;
-    pane_cx->pane           = sdl_get_pane(x_disp, y_disp, w_total, h_total, border_style);
+    pane_cx->pane           = get_pane(x_disp, y_disp, w_total, h_total, border_style);
     pane_cx->vars           = NULL;
     pane_cx->pane_handler   = pane_handler;
     pane_cx->pane_list_head = pane_list_head;
@@ -539,6 +584,16 @@ void sdl_pane_create(struct pane_list_head_s * pane_list_head, pane_handler_t pa
 
     // call the pane_handler init
     pane_handler(pane_cx, PANE_HANDLER_REQ_INITIALIZE, init_params, NULL);
+}
+
+void sdl_pane_update(pane_cx_t *pane_cx, 
+                     int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total)
+{
+    pane_cx->x_disp   = x_disp;
+    pane_cx->y_disp   = y_disp;
+    pane_cx->w_total  = w_total;
+    pane_cx->h_total  = h_total;
+    pane_cx->pane     = get_pane(x_disp, y_disp, w_total, h_total, pane_cx->border_style);
 }
 
 static void pane_terminate(struct pane_list_head_s * pane_list_head, pane_cx_t * pane_cx)
@@ -573,9 +628,9 @@ static int32_t pane_move_speed(void)
     return speed;
 }
 
-rect_t sdl_init_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, 
-                     int32_t border_style, int32_t border_color, bool clear,
-                     rect_t * loc_full_pane, rect_t * loc_bar_move, rect_t * loc_bar_terminate)
+rect_t init_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, 
+                 int32_t border_style, int32_t border_color, bool clear,
+                 rect_t * loc_full_pane, rect_t * loc_bar_move, rect_t * loc_bar_terminate)
 {
     rect_t locz  = {0, 0, 0, 0};  // zero
     rect_t panez  = {0, 0, 0, 0};  // zero
@@ -603,11 +658,11 @@ rect_t sdl_init_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_
                         PANE_BAR_TERMINATE_WIDTH, PANE_BAR_HEIGHT-2*PANE_BORDER_WIDTH};
 
         if (clear) {
-            sdl_render_fill_rect(&pane, &locf, BLACK);
+            sdl_render_fill_rect(&pane, &locf, SDL_BLACK);
         }
         sdl_render_rect(&pane, &locf, PANE_BORDER_WIDTH, border_color);
         sdl_render_fill_rect(&pane, &locb, border_color);
-        sdl_render_fill_rect(&pane, &locbt, RED);
+        sdl_render_fill_rect(&pane, &locbt, SDL_RED);
 
         *loc_full_pane = locf;
         *loc_bar_move = locbm;
@@ -622,7 +677,7 @@ rect_t sdl_init_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_
         rect_t locf  = {-PANE_BORDER_WIDTH, -PANE_BORDER_WIDTH, w_total, h_total};   // full
 
         if (clear) {
-            sdl_render_fill_rect(&pane, &locf, BLACK);
+            sdl_render_fill_rect(&pane, &locf, SDL_BLACK);
         }
         sdl_render_rect(&pane, &locf, PANE_BORDER_WIDTH, border_color);
 
@@ -638,7 +693,7 @@ rect_t sdl_init_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_
         rect_t locf  = {0, 0, w_total, h_total};   // full
 
         if (clear) {
-            sdl_render_fill_rect(&pane, &locf, BLACK);
+            sdl_render_fill_rect(&pane, &locf, SDL_BLACK);
         }
 
         *loc_full_pane = locf;
@@ -652,7 +707,7 @@ rect_t sdl_init_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_
     return panez;
 }
 
-rect_t sdl_get_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, int32_t border_style)
+rect_t get_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, int32_t border_style)
 {
     rect_t panez  = {0, 0, 0, 0};  // zero
 
@@ -678,7 +733,7 @@ void sdl_display_init(int32_t * win_width, int32_t * win_height, bool * win_mini
 {
     sdl_event_max = 0;
 
-    set_color(BLACK);
+    set_color(SDL_BLACK);
     SDL_RenderClear(sdl_renderer);
 
     if (win_width) {
@@ -745,6 +800,7 @@ void sdl_register_event(rect_t * pane, rect_t * loc, int32_t event_id, int32_t e
     e->disp_loc.w = loc->w;
     e->disp_loc.h = loc->h;
     e->event_cx = event_cx;
+    e->pane = *pane;
 
     sdl_event_max++;
 }
@@ -755,6 +811,9 @@ void sdl_render_text_and_register_event(rect_t * pane, int32_t x, int32_t y,
 {
     rect_t loc_clipped;
     loc_clipped = sdl_render_text(pane, x, y, font_ptsize, str, fg_color, bg_color);
+    if (loc_clipped.w == 0) {
+        return;
+    }
     sdl_register_event(pane, &loc_clipped, event_id, event_type, event_cx);
 }
 
@@ -811,13 +870,14 @@ sdl_event_t * sdl_poll_event(void)
         bool active;
         int32_t event_id;
         void * event_cx;
-        int32_t x_start;
-        int32_t y_start;
+        rect_t pane;
         int32_t x_last;
         int32_t y_last;
+        int32_t abs_total_delta_x;
+        int32_t abs_total_delta_y;
     } mouse_motion;
 
-    bzero(&event, sizeof(event));
+    memset(&event, 0,sizeof(event));
 
     // if a push event is pending then return that event;
     // the push event can be used to inject an event from another thread,
@@ -898,15 +958,22 @@ sdl_event_t * sdl_poll_event(void)
                 mouse_motion.active = true;
                 mouse_motion.event_id = sdl_event_reg_tbl[i].event_id;
                 mouse_motion.event_cx = sdl_event_reg_tbl[i].event_cx;
-                mouse_motion.x_start = ev.button.x;
-                mouse_motion.y_start = ev.button.y;
-                mouse_motion.x_last  = ev.button.x;
-                mouse_motion.y_last  = ev.button.y;
+                mouse_motion.pane     = sdl_event_reg_tbl[i].pane;
+                mouse_motion.x_last   = ev.button.x;
+                mouse_motion.y_last   = ev.button.y;
+                mouse_motion.abs_total_delta_x = 0;
+                mouse_motion.abs_total_delta_y = 0;
 
                 event.event_id = mouse_motion.event_id;
                 event.event_cx = mouse_motion.event_cx;
                 event.mouse_motion.delta_x = 0;
                 event.mouse_motion.delta_y = 0;
+                event.mouse_motion.x = ev.button.x - mouse_motion.pane.x;
+                event.mouse_motion.y = ev.button.y - mouse_motion.pane.y;
+                event.mouse_motion.start = true;
+                event.mouse_motion.end = false;
+                event.mouse_motion.end_abs_total_delta_x = 0;
+                event.mouse_motion.end_abs_total_delta_y = 0;
             }
             break; }
 
@@ -928,6 +995,23 @@ sdl_event_t * sdl_poll_event(void)
                 break;
             }
 
+            // if mouse motion is active then return the mouse motion event
+            // with 'end' flag set; and including the total absolute value of
+            // x and y motion; this can be used by caller to perform a different
+            // response when there is no motion
+            if (mouse_motion.active) {
+                event.event_id = mouse_motion.event_id;
+                event.event_cx = mouse_motion.event_cx;
+                event.mouse_motion.delta_x = 0;
+                event.mouse_motion.delta_y = 0;
+                event.mouse_motion.x = ev.button.x - mouse_motion.pane.x;
+                event.mouse_motion.y = ev.button.y - mouse_motion.pane.y;
+                event.mouse_motion.start = false;
+                event.mouse_motion.end = true;
+                event.mouse_motion.end_abs_total_delta_x = mouse_motion.abs_total_delta_x;
+                event.mouse_motion.end_abs_total_delta_y = mouse_motion.abs_total_delta_y;
+            }
+
             // clear mouse_motion 
             memset(&mouse_motion,0,sizeof(mouse_motion));
             break; }
@@ -943,9 +1027,20 @@ sdl_event_t * sdl_poll_event(void)
             event.event_cx = mouse_motion.event_cx;
             event.mouse_motion.delta_x = 0;
             event.mouse_motion.delta_y = 0;
+            event.mouse_motion.x = 0;
+            event.mouse_motion.y = 0;
+            event.mouse_motion.start = false;
+            event.mouse_motion.end = false;
+            event.mouse_motion.end_abs_total_delta_x = 0;
+            event.mouse_motion.end_abs_total_delta_y = 0;
+
             do {
                 event.mouse_motion.delta_x += ev.motion.x - mouse_motion.x_last;
                 event.mouse_motion.delta_y += ev.motion.y - mouse_motion.y_last;
+                event.mouse_motion.x = ev.motion.x - mouse_motion.pane.x;
+                event.mouse_motion.y = ev.motion.y - mouse_motion.pane.y;
+                mouse_motion.abs_total_delta_x += abs(ev.motion.x - mouse_motion.x_last);
+                mouse_motion.abs_total_delta_y += abs(ev.motion.y - mouse_motion.y_last);
                 mouse_motion.x_last = ev.motion.x;
                 mouse_motion.y_last = ev.motion.y;
             } while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION) == 1);
@@ -1021,6 +1116,8 @@ sdl_event_t * sdl_poll_event(void)
                 event_id = !shift ? SDL_EVENT_KEY_LEFT_ARROW : SDL_EVENT_KEY_SHIFT_LEFT_ARROW;
             } else if (key == SDLK_RIGHT) {
                 event_id = !shift ? SDL_EVENT_KEY_RIGHT_ARROW : SDL_EVENT_KEY_SHIFT_RIGHT_ARROW;
+            } else if (key >= SDLK_F1 && key <= SDLK_F12) {
+                event_id = key - SDLK_F1 + SDL_EVENT_KEY_F(1);
             }
 
             // adjust event_id if ctrl and/or alt is active
@@ -1106,7 +1203,7 @@ sdl_event_t * sdl_poll_event(void)
             }
             if (found_pane_cx != event.event_cx) {
                 DEBUG("DISCARDING EVENT\n");
-                bzero(&event, sizeof(event));
+                memset(&event, 0, sizeof(event));
             }
         }
 
@@ -1131,9 +1228,11 @@ void sdl_push_event(sdl_event_t *ev)
 
 void sdl_play_event_sound(void)   
 {
+#ifdef ENABLE_UTIL_SDL_BUTTON_SOUND
     if (sdl_button_sound) {
         Mix_PlayChannel(-1, sdl_button_sound, 0);
     }
+#endif
 }
 
 // -----------------  RENDER TEXT  -------------------------------------- 
@@ -1144,6 +1243,11 @@ rect_t sdl_render_text(rect_t * pane, int32_t x, int32_t y, int32_t font_ptsize,
     texture_t texture;
     int32_t   width, height;
     rect_t    loc, loc_clipped = {0,0,0,0};
+
+    // if zero length string just return
+    if (str[0] == '\0') {
+        return loc_clipped;
+    }
     
     // create the text texture
     texture =  sdl_create_text_texture(fg_color, bg_color, font_ptsize, str);
@@ -1180,17 +1284,12 @@ void sdl_render_printf(rect_t * pane, int32_t x, int32_t y, int32_t font_ptsize,
     vsnprintf(str, sizeof(str), fmt, ap);
     va_end(ap);
 
-    if (str[0] == '\0') {
-        return;
-    }
-    
     sdl_render_text(pane, x, y, font_ptsize, str, fg_color, bg_color);
 }
 
 // -----------------  RENDER RECTANGLES & LINES  ------------------------ 
 
 // XXX sdl_render_rect, and sdl_render_fill_rect needs to support clipping
-
 void sdl_render_rect(rect_t * pane, rect_t * loc, int32_t line_width, int32_t color)
 {
     SDL_Rect rect;
@@ -1776,7 +1875,7 @@ texture_t sdl_create_filled_circle_texture(int32_t radius, int32_t color)
         } while (0)
 
     // initialize pixels
-    bzero(pixels,sizeof(pixels));
+    memset(pixels,0,sizeof(pixels));
     while(x >= y) {
         DRAWLINE(y+radius, -x+radius, x+radius, rgba);
         DRAWLINE(x+radius, -y+radius, y+radius, rgba);
@@ -1832,7 +1931,9 @@ texture_t sdl_create_text_texture(int32_t fg_color, int32_t bg_color, int32_t fo
     // if the font has not been initialized then do so
     font_init(font_ptsize);
 
-    // xxx comments
+    // render the text to a surface,
+    // create a texture from the surface
+    // free the surface
     surface = TTF_RenderText_Shaded(sdl_font[font_ptsize].font, str, fg_sdl_color, bg_sdl_color);
     if (surface == NULL) {
         ERROR("failed to allocate surface\n");
@@ -1846,6 +1947,7 @@ texture_t sdl_create_text_texture(int32_t fg_color, int32_t bg_color, int32_t fo
     }
     SDL_FreeSurface(surface);
 
+    // return the texture which contains the text
     return (texture_t)texture;
 }
 
@@ -1990,6 +2092,24 @@ rect_t sdl_render_scaled_texture(rect_t * pane, rect_t * loc, texture_t texture)
     return loc_clipped;
 }
 
+// XXX this should also support clipping
+void sdl_render_scaled_texture_ex(rect_t *pane, rect_t *src, rect_t *dst, texture_t texture)
+{
+    SDL_Rect dstrect, srcrect;
+
+    dstrect.x = dst->x + pane->x;
+    dstrect.y = dst->y + pane->y;
+    dstrect.w = dst->w;
+    dstrect.h = dst->h;
+
+    srcrect.x = src->x;
+    srcrect.y = src->y;
+    srcrect.w = src->w;
+    srcrect.h = src->h;
+
+    SDL_RenderCopy(sdl_renderer, texture, &srcrect, &dstrect);
+}
+
 void sdl_destroy_texture(texture_t texture)
 {
     if (texture) {
@@ -2059,6 +2179,7 @@ void sdl_update_iyuv_texture(texture_t texture,
 
 // -----------------  PRINT SCREEN -------------------------------------- 
 
+#ifdef ENABLE_PRINT_SCREEN
 void sdl_print_screen(char *file_name, bool flash_display, rect_t * rect_arg) 
 {
     uint8_t * pixels = NULL;
@@ -2126,7 +2247,7 @@ void sdl_print_screen(char *file_name, bool flash_display, rect_t * rect_arg)
     // it worked, flash display if enabled;
     // the caller must redraw the screen if flash_display is enabled
     if (flash_display) {
-        set_color(WHITE);
+        set_color(SDL_WHITE);
         SDL_RenderClear(sdl_renderer);
         SDL_RenderPresent(sdl_renderer);
         usleep(250000);
@@ -2150,8 +2271,66 @@ static char *print_screen_filename(void)
 
     return filename;
 }
+#endif
 
-// -----------------  MISC  --------------------------------------------- 
+// -----------------  COLORS  ------------------------------------------- 
+
+void sdl_define_custom_color(int32_t color, uint8_t r, uint8_t g, uint8_t b)
+{
+    if (color < FIRST_SDL_CUSTOM_COLOR || color >= MAX_SDL_COLOR_TO_RGBA) {
+        FATAL("color %d out of range\n", color);
+    }
+
+    sdl_color_to_rgba[color] = (r << 0) | ( g << 8) | (b << 16) | (0xff << 24);
+}
+
+// ported from http://www.noah.org/wiki/Wavelength_to_RGB_in_Python
+void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b)
+{
+    double attenuation;
+    double gamma = 0.8;
+    double R,G,B;
+
+    if (wavelength >= 380 && wavelength <= 440) {
+        double attenuation = 0.3 + 0.7 * (wavelength - 380) / (440 - 380);
+        R = pow((-(wavelength - 440) / (440 - 380)) * attenuation, gamma);
+        G = 0.0;
+        B = pow(1.0 * attenuation, gamma);
+    } else if (wavelength >= 440 && wavelength <= 490) {
+        R = 0.0;
+        G = pow((wavelength - 440) / (490 - 440), gamma);
+        B = 1.0;
+    } else if (wavelength >= 490 && wavelength <= 510) {
+        R = 0.0;
+        G = 1.0;
+        B = pow(-(wavelength - 510) / (510 - 490), gamma);
+    } else if (wavelength >= 510 && wavelength <= 580) {
+        R = pow((wavelength - 510) / (580 - 510), gamma);
+        G = 1.0;
+        B = 0.0;
+    } else if (wavelength >= 580 && wavelength <= 645) {
+        R = 1.0;
+        G = pow(-(wavelength - 645) / (645 - 580), gamma);
+        B = 0.0;
+    } else if (wavelength >= 645 && wavelength <= 750) {
+        attenuation = 0.3 + 0.7 * (750 - wavelength) / (750 - 645);
+        R = pow(1.0 * attenuation, gamma);
+        G = 0.0;
+        B = 0.0;
+    } else {
+        R = 0.0;
+        G = 0.0;
+        B = 0.0;
+    }
+
+    if (R < 0) R = 0; else if (R > 1) R = 1;
+    if (G < 0) G = 0; else if (G > 1) G = 1;
+    if (B < 0) B = 0; else if (B > 1) B = 1;
+
+    *r = R * 255;
+    *g = G * 255;
+    *b = B * 255;
+}
 
 int32_t sdl_color(char * color_str)
 {
@@ -2161,17 +2340,17 @@ int32_t sdl_color(char * color_str)
         char * name;
         int32_t id;
     } colors[] = {
-        { "PURPLE",     PURPLE     },
-        { "BLUE",       BLUE       },
-        { "LIGHT_BLUE", LIGHT_BLUE },
-        { "GREEN",      GREEN      },
-        { "YELLOW",     YELLOW     },
-        { "ORANGE",     ORANGE     },
-        { "PINK",       PINK       },
-        { "RED",        RED        },
-        { "GRAY",       GRAY       },
-        { "WHITE",      WHITE      },
-        { "BLACK",      BLACK      },
+        { "PURPLE",     SDL_PURPLE     },
+        { "BLUE",       SDL_BLUE       },
+        { "LIGHT_BLUE", SDL_LIGHT_BLUE },
+        { "GREEN",      SDL_GREEN      },
+        { "YELLOW",     SDL_YELLOW     },
+        { "ORANGE",     SDL_ORANGE     },
+        { "PINK",       SDL_PINK       },
+        { "RED",        SDL_RED        },
+        { "GRAY",       SDL_GRAY       },
+        { "WHITE",      SDL_WHITE      },
+        { "BLACK",      SDL_BLACK      },
                     };
 
     int32_t i;
