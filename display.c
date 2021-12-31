@@ -4,7 +4,7 @@
 // defines
 //
 
-#define DEFAULT_WIN_WIDTH  1920  //xxx
+#define DEFAULT_WIN_WIDTH  1920
 #define DEFAULT_WIN_HEIGHT 1080
 
 #define NM2MM(x) ((x) * 1e-6)
@@ -59,11 +59,9 @@ int display_init(bool swap_white_black_arg)
     swap_white_black = swap_white_black_arg;
 
     // init sdl, and get actual window width and height
-    //win_width  = DEFAULT_WIN_WIDTH;
-    //win_height = DEFAULT_WIN_HEIGHT;
-    win_width  = 0;  //xxx
-    win_height = 0;
-    if (sdl_init(&win_width, &win_height, true, false, swap_white_black) < 0) {
+    win_width  = DEFAULT_WIN_WIDTH;
+    win_height = DEFAULT_WIN_HEIGHT;
+    if (sdl_init(&win_width, &win_height, false, false, swap_white_black) < 0) {
         FATAL("sdl_init %dx%d failed\n", win_width, win_height);
     }
     INFO("REQUESTED win_width=%d win_height=%d\n", DEFAULT_WIN_WIDTH, DEFAULT_WIN_HEIGHT);
