@@ -77,6 +77,26 @@ https://www.amazon.com/Star-Diameter-Plastic-Bulletin-boards%EF%BC%88Black%EF%BC
 - https://www.amazon.com/DIYMAG-Refrigerator-Magnets-Industrial-Whiteboard/dp/B07MV6M12H/ref=sr_1_1?crid=22HW77PRI3BCU&keywords=small+disc+magnets&qid=1640705093&sprefix=small+disc+%2Caps%2C134&sr=8-1
 
 ======================================
+SIMULATION  
+======================================
+
+search 
+- angular spectrum method
+- angular spectrum method "propagation term"
+
+https://en.wikipedia.org/wiki/Angular_spectrum_method
+https://www.egr.msu.edu/~fultras-web/background/asa.php
+
+https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.674.3630&rep=rep1&type=pdf
+  pg 3
+
+http://www.fftw.org/fftw3.pdf
+
+https://rafael-fuente.github.io/simulating-diffraction-patterns-with-the-angular-spectrum-method-and-python.html
+https://rafael-fuente.github.io/simulating-diffraction-patterns-with-the-angular-spectrum-method-and-python.html
+
+
+======================================
 3D PRINTING ...
 ======================================
 
@@ -86,6 +106,19 @@ What is needed:
 - Holder for obstacle
 
 Each should have a common base
+
+
+
+base pieces for lens
+  30 x 40 x 5  and   35 x 40 x 5
+
+platform above these base pieces
+   90 x 24 x 7
+
+uprights
+  10 x 24 x 40    28 up    xxx needs to be taller
+
+  76 x 3 x 50  hollow 25 up
 
 
 
