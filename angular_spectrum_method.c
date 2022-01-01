@@ -26,7 +26,7 @@
 #define Z (2.)  // meters
 
 complex  in[N][N];
-complex   out[N][N];
+//complex   out[N][N];
 fftw_plan   plan_fwd;
 fftw_plan   plan_back;
 
@@ -48,15 +48,12 @@ int main(int argc, char **argv)
     init_ring();
 
     // init 2d fft
-    plan_fwd  = fftw_plan_dft_2d(N, N, (complex*)in, (complex*)out, FFTW_FORWARD, FFTW_ESTIMATE);
-    plan_back = fftw_plan_dft_2d(N, N, (complex*)in, (complex*)out, FFTW_BACKWARD, FFTW_ESTIMATE);
+    plan_fwd  = fftw_plan_dft_2d(N, N, (complex*)in, (complex*)in, FFTW_FORWARD, FFTW_ESTIMATE);
+    plan_back = fftw_plan_dft_2d(N, N, (complex*)in, (complex*)in, FFTW_BACKWARD, FFTW_ESTIMATE);
 
     // run fft forward
     fftw_execute(plan_fwd);
 
-    // copy out to in, and 
-    // apply propagation phase term
-    memcpy(in, out, sizeof(out));
     apply();
 
     // run fft backward
@@ -98,7 +95,7 @@ void sim_get_screen(double screen[MAX_SCREEN][MAX_SCREEN])
             double sum = 0;
             for (int ii = i*scale_factor; ii < (i+1)*scale_factor; ii++) {
                 for (int jj = j*scale_factor; jj < (j+1)*scale_factor; jj++) {
-                    sum += square(creal(out[ii][jj])) + square(cimag(out[ii][jj]));
+                    sum += square(creal(in[ii][jj])) + square(cimag(in[ii][jj]));
                 }
             }
             screen[i][j] = sum;
