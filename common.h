@@ -30,3 +30,8 @@ complex buff[N][N];
 int asm_init(void);
 void asm_execute(double wavelen, double z);
 
+
+
+void init_aperture_rh(void);
+void init_aperture_ring(void);
+void init_aperture_ss(void);
