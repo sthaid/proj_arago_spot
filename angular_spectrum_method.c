@@ -18,20 +18,8 @@
 
 #include "common.h"
 
-#include <math.h>
-#include <complex.h>
-#include <fftw3.h>
-
-#define N           5000
-#define TOTAL_SIZE  .050
-#define ELEM_SIZE   (TOTAL_SIZE/N)
-
-complex     buff[N][N];
-fftw_plan   fwd;
-fftw_plan   back;
-
-int asm_init(void);
-void asm_execute(double wavelen, double z);
+static fftw_plan   fwd;
+static fftw_plan   back;
 
 // ---- UNIT TEST --------------------
 
@@ -107,46 +95,6 @@ void init_ss(void)
                 fabs(x-x_ctr)*ELEM_SIZE < height/2)
             {
                 buff[x][y] = 1;
-            }
-        }
-    }
-}
-
-void sim_get_screen(double screen[MAX_SCREEN][MAX_SCREEN])
-{
-    const int scale_factor = N / MAX_SCREEN;
-
-    // using the screen_amp1, screen_amp2, and scale_factor as input,
-    // compute the return screen buffer intensity values;
-    for (int i = 0; i < MAX_SCREEN; i++) {
-        for (int j = 0; j < MAX_SCREEN; j++) {
-            double sum = 0;
-            for (int ii = i*scale_factor; ii < (i+1)*scale_factor; ii++) {
-                for (int jj = j*scale_factor; jj < (j+1)*scale_factor; jj++) {
-                    sum += square(creal(buff[ii][jj])) + square(cimag(buff[ii][jj]));
-                }
-            }
-            screen[i][j] = sum;
-        }
-    }
-
-    // determine max_screen_value
-    double max_screen_value = -1;
-    for (int i = 0; i < MAX_SCREEN; i++) {
-        for (int j = 0; j < MAX_SCREEN; j++) {
-            if (screen[i][j] > max_screen_value) {
-                max_screen_value = screen[i][j];
-            }
-        }
-    }
-    DEBUG("max_screen_value %g\n", max_screen_value);
-
-    // normalize screen values to range 0..1
-    if (max_screen_value) {
-        double max_screen_value_recipricol = 1 / max_screen_value;
-        for (int i = 0; i < MAX_SCREEN; i++) {
-            for (int j = 0; j < MAX_SCREEN; j++) {
-                screen[i][j] *= max_screen_value_recipricol;
             }
         }
     }
