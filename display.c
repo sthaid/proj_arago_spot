@@ -1,3 +1,6 @@
+// xxx adjust z
+// xxx adjust color, and display in that color
+
 #include "common.h"
 
 //
@@ -56,7 +59,7 @@ int display_init(bool swap_white_black)
     INFO("ACTUAL    win_width=%d win_height=%d\n", win_width, win_height);
 
     //  xxx when init make sure there is at least one
-    run_compute_thread(0, 532e-9, 2);
+    run_compute_thread(0, 525e-9, 2);
 
     // return success
     return 0;
@@ -253,6 +256,10 @@ static void render_screen(
             // to a pixel intensity; two algorithm choices are provided:
             // - 0: logarithmic  (default)
             // - 1: linear
+
+// xxx  AAA
+// void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b)
+
             if (intensity_algorithm == 0) {
                 green = ( screen[i][j] == 0 
                           ? 0 
@@ -430,8 +437,14 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
     if (request == PANE_HANDLER_REQ_RENDER) {
         int row, i;
 
+        sdl_render_printf(pane, 0, pane->h-ROW2Y(5,LARGE_FONT), 
+                          LARGE_FONT, SDL_WHITE, SDL_BLACK, 
+                          "Z       = %0.3lf m", z);
+        sdl_render_printf(pane, 0, pane->h-ROW2Y(6,LARGE_FONT), 
+                          LARGE_FONT, SDL_WHITE, SDL_BLACK, 
+                          "WAVELEN = %0.3lf nm", wavelen*1e9);
+        
         // register for events ...
-
         // - aperture select
         for (row = 0, i = 0; i < max_aperture; i++, row++) {
             sdl_render_text_and_register_event(
@@ -453,6 +466,18 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
         case SDL_EVENT_APERTURE_SELECT ... SDL_EVENT_APERTURE_SELECT+MAX_APERTURE-1: {
             int requested_aperture_idx = event->event_id - SDL_EVENT_APERTURE_SELECT;
             run_compute_thread(requested_aperture_idx, -1, -1);
+            break; }
+        case SDL_EVENT_KEY_LEFT_ARROW:
+        case SDL_EVENT_KEY_RIGHT_ARROW: {
+            double requested_z = z + (event->event_id == SDL_EVENT_KEY_LEFT_ARROW ? -.010 : +.010);
+// xxx limit
+            run_compute_thread(-1, -1, requested_z);
+            break; }
+        case SDL_EVENT_KEY_UP_ARROW:
+        case SDL_EVENT_KEY_DOWN_ARROW: {
+            double requested_wavelen = wavelen + (event->event_id == SDL_EVENT_KEY_DOWN_ARROW ? -25e-9 : +25e-9);
+// xxx limit
+            run_compute_thread(-1, requested_wavelen, -1);
             break; }
         }
 
@@ -484,8 +509,11 @@ static void run_compute_thread(int requested_aperture_idx, double requested_wave
 
     if (compute_in_progress) return;
 
+    INFO("requested_aperture_idx=%d  requested_wavelen=%0.0lf nm  requested_z=%0.3lf m\n",
+         requested_aperture_idx, requested_wavelen*1e9, requested_z);
+
     if (requested_aperture_idx != -1) aperture_idx = requested_aperture_idx;
-    if (requested_wavelen != -1)wavelen = requested_wavelen;
+    if (requested_wavelen != -1) wavelen = requested_wavelen;
     if (requested_z != -1) z = requested_z;
 
     memset(screen, 0, sizeof(screen));
