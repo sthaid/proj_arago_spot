@@ -4,9 +4,6 @@
 // defines
 //
 
-#define DEFAULT_WIN_WIDTH  1920
-#define DEFAULT_WIN_HEIGHT 1080
-
 #define LARGE_FONT 24
 #define SMALL_FONT 16 
 
@@ -15,6 +12,7 @@
 #define MAX_SCREEN 500
 #define SCREEN_ELEMENT_SIZE  (1000 * TOTAL_SIZE / MAX_SCREEN)   // xxx mm
 
+// xxx dont' display until cpmputedone
 //
 // variables
 //
@@ -22,13 +20,14 @@
 static int               win_width;
 static int               win_height;
 
-static int               intensity_algorithm = 1;
+static int               intensity_algorithm = 0;
 
 static double            sensor_width  = .1;   // mm
 static double            sensor_height = .1;   // mm
 static bool              sensor_lines_enabled = false;
 
-static aperture_t      * current_aperture; // xxx init
+static int               current_aperture_idx; // xxx init
+static bool              compute_done;
 
 //
 // prototypes
@@ -36,6 +35,7 @@ static aperture_t      * current_aperture; // xxx init
 
 static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
+static void *compute_thread(void *cx);
 static double get_sensor_value(int screen_idx, double screen[MAX_SCREEN][MAX_SCREEN]);  // xxx move
 static void get_screen(double screen[MAX_SCREEN][MAX_SCREEN]);  // xxx move
 
@@ -43,14 +43,23 @@ static void get_screen(double screen[MAX_SCREEN][MAX_SCREEN]);  // xxx move
 
 int display_init(bool swap_white_black)
 {
+    pthread_t tid;
+
+    #define REQUESTED_WIN_WIDTH  800
+    #define REQUESTED_WIN_HEIGHT 625
+
     // init sdl, and get actual window width and height
-    win_width  = DEFAULT_WIN_WIDTH;
-    win_height = DEFAULT_WIN_HEIGHT;
+    win_width  = REQUESTED_WIN_WIDTH;
+    win_height = REQUESTED_WIN_HEIGHT;
     if (sdl_init(&win_width, &win_height, false, false, swap_white_black) < 0) {
         FATAL("sdl_init %dx%d failed\n", win_width, win_height);
     }
-    INFO("REQUESTED win_width=%d win_height=%d\n", DEFAULT_WIN_WIDTH, DEFAULT_WIN_HEIGHT);
+    INFO("REQUESTED win_width=%d win_height=%d\n", REQUESTED_WIN_WIDTH, REQUESTED_WIN_HEIGHT);
     INFO("ACTUAL    win_width=%d win_height=%d\n", win_width, win_height);
+
+    //  xxx when init make sure there is at least one
+    current_aperture_idx = 0;
+    pthread_create(&tid, NULL, compute_thread, NULL);
 
     // return success
     return 0;
@@ -60,14 +69,14 @@ int display_init(bool swap_white_black)
 
 void display_hndlr(void)
 {
-    int interferometer_diagram_pane_width;
-    int interference_pattern_pane_width;
-    int interference_pattern_pane_height;
+    int interference_pattern_pane_width, interference_pattern_pane_height;
+    int control_pane_width, control_pane_height;
 
     // init pane sizing variables
     interference_pattern_pane_width = MAX_SCREEN + 4;
     interference_pattern_pane_height = (MAX_SCREEN+121) + 4;
-    interferometer_diagram_pane_width = win_width - interference_pattern_pane_width;
+    control_pane_width = win_width - interference_pattern_pane_width;
+    control_pane_height = interference_pattern_pane_height;
 
     // call the pane manger; 
     // - this will not return except when it is time to terminate the program
@@ -81,12 +90,12 @@ void display_hndlr(void)
         100000,         // 0=continuous, -1=never, else us
         2,              // number of pane handler varargs that follow
         interference_pattern_pane_hndlr, NULL, 
-            interferometer_diagram_pane_width, 0, 
+            0, 0, 
             interference_pattern_pane_width, interference_pattern_pane_height,
             PANE_BORDER_STYLE_MINIMAL,
         control_pane_hndlr, NULL, 
-            interferometer_diagram_pane_width, interference_pattern_pane_height,
-            interference_pattern_pane_width, win_height-interference_pattern_pane_height,
+            interference_pattern_pane_width, 0,
+            control_pane_width, control_pane_height,
             PANE_BORDER_STYLE_MINIMAL
         );
 }
@@ -148,7 +157,10 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         //          621
 
         // get the screen data
-        get_screen(screen);
+        memset(screen, 0, sizeof(screen));
+        if (compute_done) {
+            get_screen(screen);
+        }
 
         // render the sections that make up this pane, as described above
         render_interference_screen(0, MAX_SCREEN, screen, vars->texture, vars->pixels, pane);
@@ -156,6 +168,14 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         render_intensity_graph(MAX_SCREEN+1, 100, screen, pane);
         render_scale(MAX_SCREEN+101, 20, pane);
 
+        if (!compute_done) {
+            sdl_render_printf(pane, 
+                MAX_SCREEN/2 - COL2X(7,LARGE_FONT)/2, MAX_SCREEN/2 - ROW2Y(1,LARGE_FONT)/2,
+                LARGE_FONT, SDL_WHITE, SDL_BLACK, "WORKING");
+        }
+            
+
+        // xxx move all controls to ctrl pane
         // register events
         sprintf(sensor_width_str, "W=%3.1f", sensor_width);
         sdl_render_text_and_register_event(
@@ -388,7 +408,7 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
             sdl_render_text_and_register_event(
                     pane, 0, ROW2Y(row,LARGE_FONT), LARGE_FONT,
                     aperture[i].name, 
-                    current_aperture == &aperture[i] ? SDL_GREEN : SDL_LIGHT_BLUE, SDL_BLACK,
+                    current_aperture_idx == i ? SDL_GREEN : SDL_LIGHT_BLUE, SDL_BLACK,
                     SDL_EVENT_SIM_CFGSEL+i, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         }
 
@@ -402,10 +422,12 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
     if (request == PANE_HANDLER_REQ_EVENT) {
         switch (event->event_id) {
         case SDL_EVENT_SIM_CFGSEL ... SDL_EVENT_SIM_CFGSEL+MAX_APERTURE-1: {
-            int idx = event->event_id - SDL_EVENT_SIM_CFGSEL;
-            current_aperture = &aperture[idx];
-            aperture_select(idx);
-            angular_spectrum_method_execute(532e-9, 2.0);
+            pthread_t tid;
+
+            current_aperture_idx = event->event_id - SDL_EVENT_SIM_CFGSEL;
+            compute_done = false;
+            pthread_create(&tid, NULL, compute_thread,NULL);
+//AAA xxx
             break; }
         }
 
@@ -424,6 +446,17 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
     // not reached
     assert(0);
     return PANE_HANDLER_RET_NO_ACTION;
+}
+
+// xxx create detached
+static void *compute_thread(void *cx)
+{
+    aperture_select(current_aperture_idx);
+    angular_spectrum_method_execute(532e-9, 2.0);  // xxx need to also vary wavlen and z
+
+    compute_done = true;
+
+    return NULL;
 }
 
 // -----------------  SUPPORT ROUTINES  -----------------------------------------
