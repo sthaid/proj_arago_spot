@@ -1,0 +1,10 @@
+
+# units = mm
+#
+# NAME      ATTRIBUTES          COMMENTS
+# ----      ----------          ---------
+   
+rh          0.3                 diameter
+ss          0.15,20             width,height
+ring        6,30                id,od
+

@@ -27,7 +27,7 @@ static fftw_plan   back;
 
 static void apply(double wavelen, double z);
 
-int asm_init(void)
+int angular_spectrum_method_init(void)
 {
     printf("N          = %d\n", N);
     printf("TOTAL_SIZE = %0.3f mm\n", TOTAL_SIZE * 1000);
@@ -40,8 +40,9 @@ int asm_init(void)
     return 0;
 }
 
-void asm_execute(double wavelen, double z)
+void angular_spectrum_method_execute(double wavelen, double z)
 {
+    // xxx comments
     fftw_execute(fwd);
     apply(wavelen, z);  // xxx better name
     fftw_execute(back);
@@ -55,9 +56,7 @@ static void apply(double wavelen, double z)
         for (int j = 0; j < N; j++) {
             kx = (2*M_PI/TOTAL_SIZE) * (i <= N/2-1 ? i : i-N);
             ky = (2*M_PI/TOTAL_SIZE) * (j <= N/2-1 ? j : j-N);
-            kz = csqrt( square(2*M_PI/wavelen) -
-                        square(kx) -
-                        square(ky) );
+            kz = csqrt( square(2*M_PI/wavelen) - square(kx) - square(ky) );
             buff[i][j] = buff[i][j] * cexp(I * kz * z);
         }
     }
