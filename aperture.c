@@ -1,36 +1,6 @@
 #include "common.h"
 
 //
-// typedefs
-//
- 
-enum aperature_id {APERTURE_ID_RH, APERTURE_ID_SS, APERTURE_ID_RING};
-
-typedef struct {
-    enum aperature_id id;
-    union {
-        struct {
-            double diameter_mm;
-        } rh;
-        struct {
-            double width_mm;
-            double height_mm;
-        } ss;
-        struct {
-            double id_mm;
-            double od_mm;
-        } ring;
-    };
-} aperture_t;
-
-//
-// variables
-//
-
-static aperture_t aperture[100];
-static int max_aperture;
-
-//
 // prototypes
 //
 
@@ -65,25 +35,21 @@ int aperture_init(void)
         }
 
         aperture_t *x = &aperture[max_aperture];
-        if (strcmp(name, "rh") == 0) x->id = APERTURE_ID_RH;
-        else if (strcmp(name, "ss") == 0) x->id = APERTURE_ID_SS;
-        else if (strcmp(name, "ring") == 0) x->id = APERTURE_ID_RING;
-        else goto error;
 
-        switch (x->id) {
-        case APERTURE_ID_RH:
+        strcpy(x->name, name);
+        if (strcmp(name, "rh") == 0) {
             if (sscanf(attributes, "%lf", &x->rh.diameter_mm) != 1) goto error;
             INFO("rh:   diameter_mm=%0.3lf\n", x->rh.diameter_mm);
-            break;
-        case APERTURE_ID_SS:
+        } else if (strcmp(name, "ss") == 0) {
             if (sscanf(attributes, "%lf,%lf", &x->ss.width_mm, &x->ss.height_mm) != 2) goto error;
             INFO("ss:   width_mm=%0.3lf  height_mm=%0.3lf\n", x->ss.width_mm, x->ss.height_mm);
-            break;
-        case APERTURE_ID_RING:
+        } else if (strcmp(name, "ring") == 0) {
             if (sscanf(attributes, "%lf,%lf", &x->ring.id_mm, &x->ring.od_mm) != 2) goto error;
             INFO("ring: id_mm=%0.3lf  od_mm=%0.3lf\n", x->ring.id_mm, x->ring.od_mm);
-            break;
+        } else {
+            goto error;
         }
+
         max_aperture++;
     }
 
@@ -99,19 +65,18 @@ error:
 void aperture_select(int idx)
 {
     assert(idx >= 0 && idx < max_aperture);
-
     aperture_t *x = &aperture[idx];
 
-    switch (x->id) {
-    case APERTURE_ID_RH:
+    memset(buff, 0, sizeof(buff));
+
+    if (strcmp(x->name, "rh") == 0) {
         rh_init(x->rh.diameter_mm/1000);
-        break;
-    case APERTURE_ID_SS:
+    } else if (strcmp(x->name, "ss") == 0) {
         ss_init(x->ss.width_mm/1000, x->ss.height_mm/1000);
-        break;
-    case APERTURE_ID_RING:
+    } else if (strcmp(x->name, "ring") == 0) {
         ring_init(x->ring.id_mm/1000, x->ring.od_mm/1000);
-        break;
+    } else {
+        FATAL("invalid idx %d\n", idx);
     }
 }
 

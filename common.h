@@ -24,6 +24,28 @@ int display_init(bool swap_white_black);
 void display_hndlr(void);
 
 // aperture.c
+#define MAX_APERTURE 100
+
+typedef struct {
+    char name[32];
+    union {
+        struct {
+            double diameter_mm;
+        } rh;
+        struct {
+            double width_mm;
+            double height_mm;
+        } ss;
+        struct {
+            double id_mm;
+            double od_mm;
+        } ring;
+    };
+} aperture_t;
+
+aperture_t aperture[MAX_APERTURE];
+int max_aperture;
+
 int aperture_init(void);
 void aperture_select(int idx);
 
