@@ -1,3 +1,5 @@
+// ASSERT N IS EVEN
+
 // angular_spectrum_method
 
 
@@ -95,13 +97,13 @@ int main(int argc, char **argv)
 
     // copy out to in, and 
     // apply propagation phase term
-    shift();
+    //shift();
     memcpy(in, out, sizeof(out));
     apply();
     // xxx
 
     // run fft backward
-    shift();
+    //shift();
     fftw_execute(plan_back);
 
     // print result
@@ -188,10 +190,21 @@ void apply(void)
                    square(M_PI*i/Lx) -
                    square(M_PI*j/Ly));
 #else
+            double kx = (M_PI/Lx) * (i <= N/2-1 ? i : i-N);
+            double ky = (M_PI/Ly) * (j <= N/2-1 ? j : j-N);
+            //double kx = (i <= N/2-1 ?  (M_PI/Lx) * i :
+                                       //(M_PI/Lx) * (i-N));
+            //double ky = (j <= N/2-1 ?  (M_PI/Ly) * j :
+                                       //(M_PI/Ly) * (j-N));
             kz = csqrt(
                    square(2*M_PI/WAVELEN) -
-                   square(M_PI*(i-N/2)/Lx) -
-                   square(M_PI*(j-N/2)/Ly));
+                   square(kx) -
+                   square(ky));
+
+            //kz = csqrt(
+                   //square(2*M_PI/WAVELEN) -
+                   //square(M_PI*(i-N/2)/Lx) -
+                   //square(M_PI*(j-N/2)/Ly));
 #endif
 
             in[i][j] = in[i][j] * cexp(I * kz * Z);
@@ -324,8 +337,8 @@ void init_ring(void)
 {
     double x_ctr = (N-1)/2.;
     double y_ctr = (N-1)/2.;
-    double id = 4e-3;
-    double od = 8e-3;
+    double id = 6.35e-3;
+    double od = 30e-3;
     //double id = 25e-3;
     //double od = 50e-3;
 

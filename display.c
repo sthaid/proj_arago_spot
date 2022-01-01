@@ -29,7 +29,7 @@ static bool              swap_white_black;
 static int               win_width;
 static int               win_height;
 
-static int               intensity_algorithm;
+static int               intensity_algorithm = 1;
 static int               display_algorithm;
 
 static double            sensor_width  = .1;   // mm
