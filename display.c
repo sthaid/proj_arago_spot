@@ -25,6 +25,7 @@ static double  sensor_width  = .1;   // mm
 static double  sensor_height = .1;   // mm
 static bool    sensor_lines_enabled = false;
 
+static double  screen[MAX_SCREEN][MAX_SCREEN];
 static int     aperture_idx;
 static double  wavelen;
 static double  z;
@@ -107,7 +108,6 @@ static void render_sensor_graph(
 static void render_sensor_graph_x_axis(
                 int y_top, int y_span, rect_t *pane);
 static double get_sensor_value(int screen_idx, double screen[MAX_SCREEN][MAX_SCREEN]);
-static void get_screen(double screen[MAX_SCREEN][MAX_SCREEN]);
 
 static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event)
 {
@@ -139,11 +139,9 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
-        double screen[MAX_SCREEN][MAX_SCREEN];
         char   sensor_width_str[20], sensor_height_str[20];
         char   intensity_algorithm_str[20];
 
-        // xxx
         // this pane is vertically arranged as follows
         // y-range  y-span  description 
         // -------  ------  -----------
@@ -154,27 +152,19 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         //          ----
         //          621
 
-        // get the screen data
-        if (!compute_in_progress) {
-            get_screen(screen);
-        } else {
-            memset(screen, 0, sizeof(screen));
-        }
-
         // render the sections that make up this pane, as described above
-        render_screen(0, MAX_SCREEN, screen, vars->texture, vars->pixels, pane);
-        sdl_render_line(pane, 0,MAX_SCREEN, MAX_SCREEN-1,MAX_SCREEN, SDL_WHITE);
-        render_sensor_graph(MAX_SCREEN+1, 100, screen, pane);
-        render_sensor_graph_x_axis(MAX_SCREEN+101, 20, pane);
-
-        // if screen data is not ready, render "WORKING"
-        if (compute_in_progress) {
+        if (!compute_in_progress) {
+            render_screen(0, MAX_SCREEN, screen, vars->texture, vars->pixels, pane);
+            sdl_render_line(pane, 0,MAX_SCREEN, MAX_SCREEN-1,MAX_SCREEN, SDL_WHITE);
+            render_sensor_graph(MAX_SCREEN+1, 100, screen, pane);
+            render_sensor_graph_x_axis(MAX_SCREEN+101, 20, pane);
+        } else {
+            // xxx maybe improve
             sdl_render_printf(pane, 
                 MAX_SCREEN/2 - COL2X(7,LARGE_FONT)/2, MAX_SCREEN/2 - ROW2Y(1,LARGE_FONT)/2,
                 LARGE_FONT, SDL_WHITE, SDL_BLACK, "WORKING");
         }
 
-        // xxx move all controls to ctrl pane
         // register events
         sprintf(sensor_width_str, "W=%3.1f", sensor_width);
         sdl_render_text_and_register_event(
@@ -407,46 +397,6 @@ static double get_sensor_value(int screen_idx, double screen[MAX_SCREEN][MAX_SCR
     return sensor_value;
 }
 
-static void get_screen(double screen[MAX_SCREEN][MAX_SCREEN])
-{
-    const int scale_factor = N / MAX_SCREEN;
-
-    // using the screen_amp1, screen_amp2, and scale_factor as input,
-    // compute the return screen buffer intensity values;
-    for (int i = 0; i < MAX_SCREEN; i++) {
-        for (int j = 0; j < MAX_SCREEN; j++) {
-            double sum = 0;
-            for (int ii = i*scale_factor; ii < (i+1)*scale_factor; ii++) {
-                for (int jj = j*scale_factor; jj < (j+1)*scale_factor; jj++) {
-                    sum += square(creal(buff[ii][jj])) + square(cimag(buff[ii][jj]));
-                }
-            }
-            screen[i][j] = sum;
-        }
-    }
-
-    // determine max_screen_value
-    double max_screen_value = -1;
-    for (int i = 0; i < MAX_SCREEN; i++) {
-        for (int j = 0; j < MAX_SCREEN; j++) {
-            if (screen[i][j] > max_screen_value) {
-                max_screen_value = screen[i][j];
-            }
-        }
-    }
-    DEBUG("max_screen_value %g\n", max_screen_value);
-
-    // normalize screen values to range 0..1
-    if (max_screen_value) {
-        double max_screen_value_recipricol = 1 / max_screen_value;
-        for (int i = 0; i < MAX_SCREEN; i++) {
-            for (int j = 0; j < MAX_SCREEN; j++) {
-                screen[i][j] *= max_screen_value_recipricol;
-            }
-        }
-    }
-}
-
 // -----------------  CONTROL PANE HANDLER  --------------------------------------
 
 // xxx controls for 
@@ -526,6 +476,7 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
 // -----------------  COMPUTE THREAD  --------------------------------------------
 
 static void *compute_thread(void *cx);
+static void get_screen(void);
 
 static void run_compute_thread(int requested_aperture_idx, double requested_wavelen, double requested_z)
 {
@@ -534,8 +485,10 @@ static void run_compute_thread(int requested_aperture_idx, double requested_wave
     if (compute_in_progress) return;
 
     if (requested_aperture_idx != -1) aperture_idx = requested_aperture_idx;
-    if (requested_wavelen != -1)      wavelen = requested_wavelen;
-    if (requested_z != -1)            z = requested_z;
+    if (requested_wavelen != -1)wavelen = requested_wavelen;
+    if (requested_z != -1) z = requested_z;
+
+    memset(screen, 0, sizeof(screen));
 
     compute_in_progress = true;
     pthread_create(&tid, NULL, compute_thread, NULL);
@@ -543,14 +496,74 @@ static void run_compute_thread(int requested_aperture_idx, double requested_wave
 
 static void *compute_thread(void *cx)
 {
+    int fd;
+    char filename[200];
+
     // xxx create detached
 
     // xxx first try to get results from cache, and save results to cache
 
+    // xxx make saved_results dir part of git repo
+
+    sprintf(filename, "saved_results/%s__%d__%0.3lf__dat", 
+            aperture[aperture_idx].full_name, (int)(wavelen*1e9), z);
+
+    fd = open(filename, O_RDONLY);
+    if (fd != -1) {
+        read(fd, screen, sizeof(screen));
+        close(fd);
+        compute_in_progress = false;
+        return NULL;
+    }
+
     aperture_select(aperture_idx);
     angular_spectrum_method_execute(wavelen, z);
-    compute_in_progress = false;
+    get_screen();
 
+    fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0666);
+    write(fd, screen, sizeof(screen));
+    close(fd);
+
+    compute_in_progress = false;
     return NULL;
 }
 
+static void get_screen(void)  // xxx name
+{
+    const int scale_factor = N / MAX_SCREEN;
+
+    // using the screen_amp1, screen_amp2, and scale_factor as input,
+    // compute the return screen buffer intensity values;
+    for (int i = 0; i < MAX_SCREEN; i++) {
+        for (int j = 0; j < MAX_SCREEN; j++) {
+            double sum = 0;
+            for (int ii = i*scale_factor; ii < (i+1)*scale_factor; ii++) {
+                for (int jj = j*scale_factor; jj < (j+1)*scale_factor; jj++) {
+                    sum += square(creal(buff[ii][jj])) + square(cimag(buff[ii][jj]));
+                }
+            }
+            screen[i][j] = sum;
+        }
+    }
+
+    // determine max_screen_value
+    double max_screen_value = -1;
+    for (int i = 0; i < MAX_SCREEN; i++) {
+        for (int j = 0; j < MAX_SCREEN; j++) {
+            if (screen[i][j] > max_screen_value) {
+                max_screen_value = screen[i][j];
+            }
+        }
+    }
+    DEBUG("max_screen_value %g\n", max_screen_value);
+
+    // normalize screen values to range 0..1
+    if (max_screen_value) {
+        double max_screen_value_recipricol = 1 / max_screen_value;
+        for (int i = 0; i < MAX_SCREEN; i++) {
+            for (int j = 0; j < MAX_SCREEN; j++) {
+                screen[i][j] *= max_screen_value_recipricol;
+            }
+        }
+    }
+}

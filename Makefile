@@ -1,5 +1,5 @@
 CC       = gcc
-CFLAGS   = -g -O2 -Wall -Iutil
+CFLAGS   = -g -O2 -Wall -Wno-unused-result -Iutil
 LDFLAGS  = -lm -lfftw3 -lSDL2 -lSDL2_ttf -lpthread
 
 TARGET   = sim

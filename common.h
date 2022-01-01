@@ -9,6 +9,9 @@
 #include <assert.h>
 #include <complex.h>
 #include <fftw3.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include <util_misc.h>
 #include <util_sdl.h>
@@ -28,7 +31,8 @@ void display_hndlr(void);
 #define MAX_APERTURE 100
 
 typedef struct {
-    char name[32];
+    char name[20];
+    char full_name[100];
     union {
         struct {
             double diameter_mm;

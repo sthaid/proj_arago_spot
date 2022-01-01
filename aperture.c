@@ -39,16 +39,17 @@ int aperture_init(void)
         strcpy(x->name, name);
         if (strcmp(name, "rh") == 0) {
             if (sscanf(attributes, "%lf", &x->rh.diameter_mm) != 1) goto error;
-            INFO("rh:   diameter_mm=%0.3lf\n", x->rh.diameter_mm);
+            sprintf(x->full_name, "rh__%0.3lf", x->rh.diameter_mm);
         } else if (strcmp(name, "ss") == 0) {
             if (sscanf(attributes, "%lf,%lf", &x->ss.width_mm, &x->ss.height_mm) != 2) goto error;
-            INFO("ss:   width_mm=%0.3lf  height_mm=%0.3lf\n", x->ss.width_mm, x->ss.height_mm);
+            sprintf(x->full_name, "ss__%0.3lf__%0.3lf", x->ss.width_mm, x->ss.height_mm);
         } else if (strcmp(name, "ring") == 0) {
             if (sscanf(attributes, "%lf,%lf", &x->ring.id_mm, &x->ring.od_mm) != 2) goto error;
-            INFO("ring: id_mm=%0.3lf  od_mm=%0.3lf\n", x->ring.id_mm, x->ring.od_mm);
+            sprintf(x->full_name, "ring__%0.3lf__%0.3lf", x->ring.id_mm, x->ring.od_mm);
         } else {
             goto error;
         }
+        INFO("%-4s - %s\n", x->name, x->full_name);
 
         max_aperture++;
     }
