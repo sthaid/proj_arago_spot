@@ -12,22 +12,23 @@
 #define MAX_SCREEN 500
 #define SCREEN_ELEMENT_SIZE  (1000 * TOTAL_SIZE / MAX_SCREEN)   // xxx mm
 
-// xxx dont' display until cpmputedone
 //
 // variables
 //
 
-static int               win_width;
-static int               win_height;
+static int     win_width;
+static int     win_height;
 
-static int               intensity_algorithm = 0;
+static int     intensity_algorithm = 0;
 
-static double            sensor_width  = .1;   // mm
-static double            sensor_height = .1;   // mm
-static bool              sensor_lines_enabled = false;
+static double  sensor_width  = .1;   // mm
+static double  sensor_height = .1;   // mm
+static bool    sensor_lines_enabled = false;
 
-static int               current_aperture_idx; // xxx init
-static bool              compute_done;
+static int     aperture_idx;
+static double  wavelen;
+static double  z;
+static bool    compute_in_progress;
 
 //
 // prototypes
@@ -35,16 +36,12 @@ static bool              compute_done;
 
 static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
-static void *compute_thread(void *cx);
-static double get_sensor_value(int screen_idx, double screen[MAX_SCREEN][MAX_SCREEN]);  // xxx move
-static void get_screen(double screen[MAX_SCREEN][MAX_SCREEN]);  // xxx move
+static void run_compute_thread(int requested_aperture_idx, double requested_wavelen, double requested_z);
 
 // -----------------  DISPLAY_INIT  ---------------------------------------------
 
 int display_init(bool swap_white_black)
 {
-    pthread_t tid;
-
     #define REQUESTED_WIN_WIDTH  800
     #define REQUESTED_WIN_HEIGHT 625
 
@@ -58,8 +55,7 @@ int display_init(bool swap_white_black)
     INFO("ACTUAL    win_width=%d win_height=%d\n", win_width, win_height);
 
     //  xxx when init make sure there is at least one
-    current_aperture_idx = 0;
-    pthread_create(&tid, NULL, compute_thread, NULL);
+    run_compute_thread(0, 532e-9, 2);
 
     // return success
     return 0;
@@ -102,14 +98,16 @@ void display_hndlr(void)
 
 // -----------------  INTERFEROMETER PATTERN PANE HANDLER  ----------------------
 
-static void render_interference_screen(
+static void render_screen(
                 int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], 
                 texture_t texture, unsigned int pixels[MAX_SCREEN][MAX_SCREEN], 
                 rect_t *pane);
-static void render_intensity_graph(
+static void render_sensor_graph(
                 int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], rect_t *pane);
-static void render_scale(
+static void render_sensor_graph_x_axis(
                 int y_top, int y_span, rect_t *pane);
+static double get_sensor_value(int screen_idx, double screen[MAX_SCREEN][MAX_SCREEN]);
+static void get_screen(double screen[MAX_SCREEN][MAX_SCREEN]);
 
 static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event)
 {
@@ -157,23 +155,24 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         //          621
 
         // get the screen data
-        memset(screen, 0, sizeof(screen));
-        if (compute_done) {
+        if (!compute_in_progress) {
             get_screen(screen);
+        } else {
+            memset(screen, 0, sizeof(screen));
         }
 
         // render the sections that make up this pane, as described above
-        render_interference_screen(0, MAX_SCREEN, screen, vars->texture, vars->pixels, pane);
+        render_screen(0, MAX_SCREEN, screen, vars->texture, vars->pixels, pane);
         sdl_render_line(pane, 0,MAX_SCREEN, MAX_SCREEN-1,MAX_SCREEN, SDL_WHITE);
-        render_intensity_graph(MAX_SCREEN+1, 100, screen, pane);
-        render_scale(MAX_SCREEN+101, 20, pane);
+        render_sensor_graph(MAX_SCREEN+1, 100, screen, pane);
+        render_sensor_graph_x_axis(MAX_SCREEN+101, 20, pane);
 
-        if (!compute_done) {
+        // if screen data is not ready, render "WORKING"
+        if (compute_in_progress) {
             sdl_render_printf(pane, 
                 MAX_SCREEN/2 - COL2X(7,LARGE_FONT)/2, MAX_SCREEN/2 - ROW2Y(1,LARGE_FONT)/2,
                 LARGE_FONT, SDL_WHITE, SDL_BLACK, "WORKING");
         }
-            
 
         // xxx move all controls to ctrl pane
         // register events
@@ -207,8 +206,6 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
     // -----------------------
     // -------- EVENT --------
     // -----------------------
-
-// xxx scaling
 
     if (request == PANE_HANDLER_REQ_EVENT) {
         switch (event->event_id) {
@@ -248,8 +245,7 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
-// xxx simpler names
-static void render_interference_screen(
+static void render_screen(
                 int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], 
                 texture_t texture, unsigned int pixels[MAX_SCREEN][MAX_SCREEN], 
                 rect_t *pane)
@@ -296,7 +292,7 @@ static void render_interference_screen(
     sdl_render_texture(pane, 0, y_top, texture);
 }
 
-static void render_intensity_graph(
+static void render_sensor_graph(
                 int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], rect_t *pane)
 {
     point_t graph[MAX_SCREEN];
@@ -323,7 +319,7 @@ static void render_intensity_graph(
     }
 }
 
-static void render_scale(int y_top, int y_span, rect_t *pane)
+static void render_sensor_graph_x_axis(int y_top, int y_span, rect_t *pane)
 {
     double tick_intvl, tick_loc;
     char tick_value_str[20];
@@ -371,95 +367,6 @@ static void render_scale(int y_top, int y_span, rect_t *pane)
                     (pane->w-COL2X(strlen(screen_diam_str),LARGE_FONT))/2, 0, 
                     LARGE_FONT, screen_diam_str, SDL_WHITE, SDL_BLACK);
 }
-
-// -----------------  CONTROL PANE HANDLER  --------------------------------------
-
-static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event)
-{
-    struct {
-        int nothing_yet;
-    } * vars = pane_cx->vars;
-    rect_t * pane = &pane_cx->pane;
-
-   #define SDL_EVENT_SIM_CFGSEL  (SDL_EVENT_USER_DEFINED + 10)
-
-    // ----------------------------
-    // -------- INITIALIZE --------
-    // ----------------------------
-
-    if (request == PANE_HANDLER_REQ_INITIALIZE) {
-        vars = pane_cx->vars = calloc(1,sizeof(*vars));
-        INFO("PANE x,y,w,h  %d %d %d %d\n",
-            pane->x, pane->y, pane->w, pane->h);
-        return PANE_HANDLER_RET_NO_ACTION;
-    }
-
-    // ------------------------
-    // -------- RENDER --------
-    // ------------------------
-
-    if (request == PANE_HANDLER_REQ_RENDER) {
-        int row, i;
-
-        // register for events ...
-
-        // - config select
-        for (row = 0, i = 0; i < max_aperture; i++, row++) {
-            sdl_render_text_and_register_event(
-                    pane, 0, ROW2Y(row,LARGE_FONT), LARGE_FONT,
-                    aperture[i].name, 
-                    current_aperture_idx == i ? SDL_GREEN : SDL_LIGHT_BLUE, SDL_BLACK,
-                    SDL_EVENT_SIM_CFGSEL+i, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        }
-
-        return PANE_HANDLER_RET_NO_ACTION;
-    }
-
-    // -----------------------
-    // -------- EVENT --------
-    // -----------------------
-
-    if (request == PANE_HANDLER_REQ_EVENT) {
-        switch (event->event_id) {
-        case SDL_EVENT_SIM_CFGSEL ... SDL_EVENT_SIM_CFGSEL+MAX_APERTURE-1: {
-            pthread_t tid;
-
-            current_aperture_idx = event->event_id - SDL_EVENT_SIM_CFGSEL;
-            compute_done = false;
-            pthread_create(&tid, NULL, compute_thread,NULL);
-//AAA xxx
-            break; }
-        }
-
-        return PANE_HANDLER_RET_DISPLAY_REDRAW;
-    }
-
-    // ---------------------------
-    // -------- TERMINATE --------
-    // ---------------------------
-
-    if (request == PANE_HANDLER_REQ_TERMINATE) {
-        free(vars);
-        return PANE_HANDLER_RET_NO_ACTION;
-    }
-
-    // not reached
-    assert(0);
-    return PANE_HANDLER_RET_NO_ACTION;
-}
-
-// xxx create detached
-static void *compute_thread(void *cx)
-{
-    aperture_select(current_aperture_idx);
-    angular_spectrum_method_execute(532e-9, 2.0);  // xxx need to also vary wavlen and z
-
-    compute_done = true;
-
-    return NULL;
-}
-
-// -----------------  SUPPORT ROUTINES  -----------------------------------------
 
 static double get_sensor_value(int screen_idx, double screen[MAX_SCREEN][MAX_SCREEN])
 {
@@ -538,5 +445,112 @@ static void get_screen(double screen[MAX_SCREEN][MAX_SCREEN])
             }
         }
     }
+}
+
+// -----------------  CONTROL PANE HANDLER  --------------------------------------
+
+// xxx controls for 
+// - z
+// - wavelen
+
+static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event)
+{
+    struct {
+        int nothing_yet;
+    } * vars = pane_cx->vars;
+    rect_t * pane = &pane_cx->pane;
+
+   #define SDL_EVENT_APERTURE_SELECT  (SDL_EVENT_USER_DEFINED + 10)
+
+    // ----------------------------
+    // -------- INITIALIZE --------
+    // ----------------------------
+
+    if (request == PANE_HANDLER_REQ_INITIALIZE) {
+        vars = pane_cx->vars = calloc(1,sizeof(*vars));
+        INFO("PANE x,y,w,h  %d %d %d %d\n",
+            pane->x, pane->y, pane->w, pane->h);
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // ------------------------
+    // -------- RENDER --------
+    // ------------------------
+
+    if (request == PANE_HANDLER_REQ_RENDER) {
+        int row, i;
+
+        // register for events ...
+
+        // - aperture select
+        for (row = 0, i = 0; i < max_aperture; i++, row++) {
+            sdl_render_text_and_register_event(
+                    pane, 0, ROW2Y(row,LARGE_FONT), LARGE_FONT,
+                    aperture[i].name, 
+                    aperture_idx == i ? SDL_GREEN : SDL_LIGHT_BLUE, SDL_BLACK,
+                    SDL_EVENT_APERTURE_SELECT+i, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+        }
+
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // -----------------------
+    // -------- EVENT --------
+    // -----------------------
+
+    if (request == PANE_HANDLER_REQ_EVENT) {
+        switch (event->event_id) {
+        case SDL_EVENT_APERTURE_SELECT ... SDL_EVENT_APERTURE_SELECT+MAX_APERTURE-1: {
+            int requested_aperture_idx = event->event_id - SDL_EVENT_APERTURE_SELECT;
+            run_compute_thread(requested_aperture_idx, -1, -1);
+            break; }
+        }
+
+        return PANE_HANDLER_RET_DISPLAY_REDRAW;
+    }
+
+    // ---------------------------
+    // -------- TERMINATE --------
+    // ---------------------------
+
+    if (request == PANE_HANDLER_REQ_TERMINATE) {
+        free(vars);
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // not reached
+    assert(0);
+    return PANE_HANDLER_RET_NO_ACTION;
+}
+
+// -----------------  COMPUTE THREAD  --------------------------------------------
+
+static void *compute_thread(void *cx);
+
+static void run_compute_thread(int requested_aperture_idx, double requested_wavelen, double requested_z)
+{
+    pthread_t tid;
+
+    if (compute_in_progress) return;
+
+    if (requested_aperture_idx != -1) aperture_idx = requested_aperture_idx;
+    if (requested_wavelen != -1)      wavelen = requested_wavelen;
+    if (requested_z != -1)            z = requested_z;
+
+    compute_in_progress = true;
+    pthread_create(&tid, NULL, compute_thread, NULL);
+}
+
+static void *compute_thread(void *cx)
+{
+    // xxx create detached
+
+    // xxx first try to get results from cache, and save results to cache
+
+    aperture_select(aperture_idx);
+    angular_spectrum_method_execute(wavelen, z);
+    compute_in_progress = false;
+
+    return NULL;
 }
 
