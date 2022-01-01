@@ -22,3 +22,6 @@ void display_hndlr(void);
 
 
 void sim_get_screen(double screen[MAX_SCREEN][MAX_SCREEN]);
+
+
+static inline double square(double x) { return x*x; }

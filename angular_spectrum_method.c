@@ -2,6 +2,8 @@
 // - ASSERT N IS EVEN
 // - do fft in place
 // - does negative z make a difference
+// - use fftw_malloc ?
+// - better name for apply0
 
 // xxx other
 // - simplify graphcis interface ?
@@ -20,73 +22,99 @@
 #include <complex.h>
 #include <fftw3.h>
 
-#define N     5000
-#define  ELEM_SIZE   (.050/N)
-#define WAVELEN 532e-9  // green  ??
-#define Z (2.)  // meters
+#define N           5000
+#define TOTAL_SIZE  .050
+#define ELEM_SIZE   (TOTAL_SIZE/N)
 
-complex  in[N][N];
-//complex   out[N][N];
-fftw_plan   plan_fwd;
-fftw_plan   plan_back;
+complex     buff[N][N];
+fftw_plan   fwd;
+fftw_plan   back;
 
-void apply(void);
+int asm_init(void);
+void asm_execute(double wavelen, double z);
+
+// ---- UNIT TEST --------------------
+
 void init_rh(void);
-void init_ss(void);
 void init_ring(void);
-
-inline double square(double x) { return x*x; }
+void init_ss(void);
 
 int main(int argc, char **argv)
 {
-    //int x,y;
-
-    printf("elem size = %lf mm\n", ELEM_SIZE*1000);
-    printf("screen width = %lf mm\n", N*ELEM_SIZE*1000);
-
-    // init in array
+    asm_init();
     init_ring();
-
-    // init 2d fft
-    plan_fwd  = fftw_plan_dft_2d(N, N, (complex*)in, (complex*)in, FFTW_FORWARD, FFTW_ESTIMATE);
-    plan_back = fftw_plan_dft_2d(N, N, (complex*)in, (complex*)in, FFTW_BACKWARD, FFTW_ESTIMATE);
-
-    // run fft forward
-    fftw_execute(plan_fwd);
-
-    apply();
-
-    // run fft backward
-    fftw_execute(plan_back);
-
+    asm_execute(532e-9, 2.0);
     display_init(false);
     display_hndlr();
+
+    return 0;
 }
 
-void apply(void)
+void init_rh(void)
 {
-    int i,j;
-    double Lx, Ly, kz;
-    for (i = 0; i < N; i++) {
-        for (j = 0; j < N; j++) {
+    int x,y;
 
-            Lx = N * ELEM_SIZE / 2;
-            Ly = N * ELEM_SIZE / 2;
-            double kx = (M_PI/Lx) * (i <= N/2-1 ? i : i-N);
-            double ky = (M_PI/Ly) * (j <= N/2-1 ? j : j-N);
-            kz = csqrt(
-                   square(2*M_PI/WAVELEN) -
-                   square(kx) -
-                   square(ky));
-            in[i][j] = in[i][j] * cexp(I * kz * Z);
+    double x_ctr = (N-1)/2.;
+    double y_ctr = (N-1)/2.;
+    const double diameter = 0.30e-3;  // .15 mm
+    //const double diameter = 50e-3;  // 50 mm
+
+    for (x = 0; x < N; x++) {
+        for (y = 0; y < N; y++) {
+            if (square((x-x_ctr)*ELEM_SIZE) + square((y-y_ctr)*ELEM_SIZE) <= square(diameter/2)) {
+                buff[x][y] = 1;
+            }
         }
     }
 }
 
-#define MAX_SCREEN_AMP N
+void init_ring(void)
+{
+    double x_ctr = (N-1)/2.;
+    double y_ctr = (N-1)/2.;
+    double id = 6.35e-3;
+    double od = 30e-3;
+    //double id = 25e-3;
+    //double od = 50e-3;
+
+    double tmp;
+    int x,y;
+
+    for (x = 0; x < N; x++) {
+        for (y = 0; y < N; y++) {
+            tmp = square((x-x_ctr)*ELEM_SIZE) + square((y-y_ctr)*ELEM_SIZE);
+            if (tmp >= square(id/2) && tmp <= square(od/2)) {
+                buff[x][y] = 1;
+            }
+        }
+    }
+}
+
+void init_ss(void)
+{
+    int x,y;
+
+    double x_ctr = (N-1)/2.;
+    double y_ctr = (N-1)/2.;
+    //const double height = 45e-3;  // 45mm
+    //const double width = 10e-3;  // 10mm
+    const double height = 50e-3;  // 50mm
+    const double width = 0.15e-3;  // 0.15mm
+
+    for (x = 0; x < N; x++) {
+        for (y = 0; y < N; y++) {
+            if (fabs(y-y_ctr)*ELEM_SIZE < width/2 &&
+                fabs(x-x_ctr)*ELEM_SIZE < height/2)
+            {
+                buff[x][y] = 1;
+            }
+        }
+    }
+}
+
 void sim_get_screen(double screen[MAX_SCREEN][MAX_SCREEN])
 {
-    const int scale_factor = MAX_SCREEN_AMP / MAX_SCREEN;
+    const int scale_factor = N / MAX_SCREEN;
 
     // using the screen_amp1, screen_amp2, and scale_factor as input,
     // compute the return screen buffer intensity values;
@@ -95,7 +123,7 @@ void sim_get_screen(double screen[MAX_SCREEN][MAX_SCREEN])
             double sum = 0;
             for (int ii = i*scale_factor; ii < (i+1)*scale_factor; ii++) {
                 for (int jj = j*scale_factor; jj < (j+1)*scale_factor; jj++) {
-                    sum += square(creal(in[ii][jj])) + square(cimag(in[ii][jj]));
+                    sum += square(creal(buff[ii][jj])) + square(cimag(buff[ii][jj]));
                 }
             }
             screen[i][j] = sum;
@@ -124,65 +152,42 @@ void sim_get_screen(double screen[MAX_SCREEN][MAX_SCREEN])
     }
 }
 
-void init_rh(void)
+// -------------------- CODE --------------
+
+static void apply(double wavelen, double z);
+
+int asm_init(void)
 {
-    int x,y;
+    printf("N          = %d\n", N);
+    printf("TOTAL_SIZE = %0.3f mm\n", TOTAL_SIZE * 1000);
+    printf("ELEM_SIZE  = %0.3f mm\n", ELEM_SIZE * 1000);
 
-    double x_ctr = (N-1)/2.;
-    double y_ctr = (N-1)/2.;
-    const double diameter = 0.30e-3;  // .15 mm
-    //const double diameter = 50e-3;  // 50 mm
+    // init 2d fft plans for inplace forward and backward fft
+    fwd  = fftw_plan_dft_2d(N, N, (complex*)buff, (complex*)buff, FFTW_FORWARD, FFTW_ESTIMATE);
+    back = fftw_plan_dft_2d(N, N, (complex*)buff, (complex*)buff, FFTW_BACKWARD, FFTW_ESTIMATE);
 
-    for (x = 0; x < N; x++) {
-        for (y = 0; y < N; y++) {
-            if (square((x-x_ctr)*ELEM_SIZE) + square((y-y_ctr)*ELEM_SIZE) <= square(diameter/2)) {
-                in[x][y] = 1;
-            }
+    return 0;
+}
+
+void asm_execute(double wavelen, double z)
+{
+    fftw_execute(fwd);
+    apply(wavelen, z);
+    fftw_execute(back);
+}
+
+static void apply(double wavelen, double z)
+{
+    double kx, ky, kz;
+
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            kx = (2*M_PI/TOTAL_SIZE) * (i <= N/2-1 ? i : i-N);
+            ky = (2*M_PI/TOTAL_SIZE) * (j <= N/2-1 ? j : j-N);
+            kz = csqrt( square(2*M_PI/wavelen) -
+                        square(kx) -
+                        square(ky) );
+            buff[i][j] = buff[i][j] * cexp(I * kz * z);
         }
     }
 }
-
-void init_ring(void)
-{
-    double x_ctr = (N-1)/2.;
-    double y_ctr = (N-1)/2.;
-    double id = 6.35e-3;
-    double od = 30e-3;
-    //double id = 25e-3;
-    //double od = 50e-3;
-
-    double tmp;
-    int x,y;
-
-    for (x = 0; x < N; x++) {
-        for (y = 0; y < N; y++) {
-            tmp = square((x-x_ctr)*ELEM_SIZE) + square((y-y_ctr)*ELEM_SIZE);
-            if (tmp >= square(id/2) && tmp <= square(od/2)) {
-                in[x][y] = 1;
-            }
-        }
-    }
-}
-
-void init_ss(void)
-{
-    int x,y;
-
-    double x_ctr = (N-1)/2.;
-    double y_ctr = (N-1)/2.;
-    //const double height = 45e-3;  // 45mm
-    //const double width = 10e-3;  // 10mm
-    const double height = 50e-3;  // 50mm
-    const double width = 0.15e-3;  // 0.15mm
-
-    for (x = 0; x < N; x++) {
-        for (y = 0; y < N; y++) {
-            if (fabs(y-y_ctr)*ELEM_SIZE < width/2 &&
-                fabs(x-x_ctr)*ELEM_SIZE < height/2)
-            {
-                in[x][y] = 1;
-            }
-        }
-    }
-}
-
