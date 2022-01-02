@@ -187,8 +187,13 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         sprintf(title_str, "W=%0.0lfmm  Z=%dmm  %dnm", 
                 TOTAL_SIZE*1000, z_mm_copy, wavelen_nm_copy);
         sdl_render_text(pane, 
-                        (pane->w-COL2X(strlen(title_str),LARGE_FONT))/2, 0, 
+                        (pane->w-COL2X(3,LARGE_FONT)-COL2X(strlen(title_str),LARGE_FONT))/2, 0, 
                         LARGE_FONT, title_str, SDL_WHITE, SDL_BLACK);
+
+        // if compute_in_progress display '*' at top left
+        if (compute_in_progress) {
+            sdl_render_text(pane, 0, 0, LARGE_FONT, "*", SDL_WHITE, SDL_BLACK);
+        }
 
         // if enabled then draw horizontal lines accross middle to represent the top and bottom of the sensor
         if (sensor_lines_enabled) {
