@@ -113,7 +113,7 @@ void display_hndlr(void)
 // -----------------  INTERFEROMETER PATTERN PANE HANDLER  ----------------------
 
 static void render_screen(
-                int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], 
+                int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], int wavelen_nm,
                 texture_t texture, unsigned int pixels[MAX_SCREEN][MAX_SCREEN], 
                 rect_t *pane);
 static void render_intensity_graph(
@@ -177,7 +177,7 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
             wavelen_nm_copy = wavelen_nm;
         }
 
-        render_screen(0, MAX_SCREEN, screen_copy, vars->texture, vars->pixels, pane);
+        render_screen(0, MAX_SCREEN, screen_copy, wavelen_nm_copy, vars->texture, vars->pixels, pane);
         sdl_render_line(pane, 0,MAX_SCREEN, MAX_SCREEN-1,MAX_SCREEN, SDL_WHITE);
         render_intensity_graph(MAX_SCREEN+1, 120, screen_copy, pane);
 
@@ -271,7 +271,7 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
 }
 
 static void render_screen(
-                int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], 
+                int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], int wavelen_nm,
                 texture_t texture, unsigned int pixels[MAX_SCREEN][MAX_SCREEN], 
                 rect_t *pane)
 {
@@ -481,21 +481,32 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
             auto_init_state = (auto_init_state == 0 ? 1 : 0);
             break; }
         case SDL_EVENT_KEY_LEFT_ARROW:
-        case SDL_EVENT_KEY_RIGHT_ARROW: {
-            int requested_z_mm;
-            requested_z_mm = z_mm + (event->event_id == SDL_EVENT_KEY_LEFT_ARROW 
-                                     ? -DELTA_Z_MM : DELTA_Z_MM);
-            if (requested_z_mm < MIN_Z_MM || requested_z_mm > MAX_Z_MM) {
+        case SDL_EVENT_KEY_RIGHT_ARROW:
+        case SDL_EVENT_KEY_SHIFT_LEFT_ARROW:
+        case SDL_EVENT_KEY_SHIFT_RIGHT_ARROW: {
+            int requested_z_mm = 
+                    (event->event_id == SDL_EVENT_KEY_SHIFT_LEFT_ARROW  ? MIN_Z_MM :
+                     event->event_id == SDL_EVENT_KEY_SHIFT_RIGHT_ARROW ? MAX_Z_MM :
+                     event->event_id == SDL_EVENT_KEY_LEFT_ARROW        ? z_mm - DELTA_Z_MM :
+                                                                          z_mm + DELTA_Z_MM);
+            if (requested_z_mm == z_mm || requested_z_mm < MIN_Z_MM || requested_z_mm > MAX_Z_MM) {
                 break;
             }
             run_compute_thread(-1, -1, requested_z_mm);
             break; }
+        case SDL_EVENT_KEY_DOWN_ARROW:
         case SDL_EVENT_KEY_UP_ARROW:
-        case SDL_EVENT_KEY_DOWN_ARROW: {
-            int requested_wavelen_nm;
-            requested_wavelen_nm = wavelen_nm + (event->event_id == SDL_EVENT_KEY_DOWN_ARROW 
-                                                 ? -DELTA_WAVLEN_NM : DELTA_WAVLEN_NM);
-            if (requested_wavelen_nm < MIN_WAVLEN_NM || requested_wavelen_nm > MAX_WAVLEN_NM) {
+        case SDL_EVENT_KEY_SHIFT_DOWN_ARROW:
+        case SDL_EVENT_KEY_SHIFT_UP_ARROW: {
+            int requested_wavelen_nm = 
+                    (event->event_id == SDL_EVENT_KEY_SHIFT_DOWN_ARROW ? MIN_WAVLEN_NM :
+                     event->event_id == SDL_EVENT_KEY_SHIFT_UP_ARROW   ? MAX_WAVLEN_NM :
+                     event->event_id == SDL_EVENT_KEY_DOWN_ARROW       ? wavelen_nm - DELTA_WAVLEN_NM :
+                                                                         wavelen_nm + DELTA_WAVLEN_NM);
+            if (requested_wavelen_nm == wavelen_nm || 
+                requested_wavelen_nm < MIN_WAVLEN_NM || 
+                requested_wavelen_nm > MAX_WAVLEN_NM) 
+            {
                 break;
             }
             run_compute_thread(-1, requested_wavelen_nm, -1);
