@@ -15,24 +15,33 @@
 #define MAX_SCREEN 500
 #define SCREEN_ELEMENT_SIZE  (1000 * TOTAL_SIZE / MAX_SCREEN)   // xxx mm
 
+#define MIN_Z        0.0
+#define MAX_Z        3.0
+#define DELTA_Z      0.1
+
+#define MIN_WAVLEN   400e-9
+#define MAX_WAVLEN   750e-9   // xxx 750
+#define DELTA_WAVLEN 25e-9
+
 //
 // variables
 //
 
-static int     win_width;
-static int     win_height;
+static int      win_width;
+static int      win_height;
 
-static int     intensity_algorithm = 0;
+static int      intensity_algorithm = 0;
 
-static double  sensor_width  = .1;   // mm
-static double  sensor_height = .1;   // mm
-static bool    sensor_lines_enabled = false;
+static double   sensor_width  = .1;   // mm
+static double   sensor_height = .1;   // mm
+static bool     sensor_lines_enabled = false;
 
-static double  screen[MAX_SCREEN][MAX_SCREEN];
-static int     aperture_idx;
-static double  wavelen;
-static double  z;
-static bool    compute_in_progress;
+static double   screen[MAX_SCREEN][MAX_SCREEN];
+static int      aperture_idx;
+static double   wavelen;
+static double   z;
+static uint64_t compute_completion_time;
+static int      auto_init_state;
 
 //
 // prototypes
@@ -41,6 +50,7 @@ static bool    compute_in_progress;
 static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static void run_compute_thread(int requested_aperture_idx, double requested_wavelen, double requested_z);
+static void auto_init(void *cx);
 
 // -----------------  DISPLAY_INIT  ---------------------------------------------
 
@@ -59,6 +69,7 @@ int display_init(bool swap_white_black)
     INFO("ACTUAL    win_width=%d win_height=%d\n", win_width, win_height);
 
     //  xxx when init make sure there is at least one
+    compute_completion_time = microsec_timer();
     run_compute_thread(0, 525e-9, 2);
 
     // return success
@@ -85,7 +96,7 @@ void display_hndlr(void)
     //   betweeen by right clicking
     sdl_pane_manager(
         NULL,           // context
-        NULL,           // called prior to pane handlers
+        auto_init,      // called prior to pane handlers
         NULL,           // called after pane handlers
         100000,         // 0=continuous, -1=never, else us
         2,              // number of pane handler varargs that follow
@@ -156,7 +167,7 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         //          621
 
         // render the sections that make up this pane, as described above
-        if (!compute_in_progress) {
+        if (compute_completion_time != 0) {
             render_screen(0, MAX_SCREEN, screen, vars->texture, vars->pixels, pane);
             sdl_render_line(pane, 0,MAX_SCREEN, MAX_SCREEN-1,MAX_SCREEN, SDL_WHITE);
             render_sensor_graph(MAX_SCREEN+1, 100, screen, pane);
@@ -165,7 +176,7 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
             // xxx maybe improve
             sdl_render_printf(pane, 
                 MAX_SCREEN/2 - COL2X(7,LARGE_FONT)/2, MAX_SCREEN/2 - ROW2Y(1,LARGE_FONT)/2,
-                LARGE_FONT, SDL_WHITE, SDL_BLACK, "WORKING");
+                LARGE_FONT, SDL_WHITE, SDL_BLACK, "WORKING");  // xxx clean up
         }
 
         // register events
@@ -414,7 +425,8 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
     } * vars = pane_cx->vars;
     rect_t * pane = &pane_cx->pane;
 
-   #define SDL_EVENT_APERTURE_SELECT  (SDL_EVENT_USER_DEFINED + 10)
+    #define SDL_EVENT_AUTO_INIT        (SDL_EVENT_USER_DEFINED + 0)
+    #define SDL_EVENT_APERTURE_SELECT  (SDL_EVENT_USER_DEFINED + 10)
 
     // ----------------------------
     // -------- INITIALIZE --------
@@ -451,6 +463,12 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
                     SDL_EVENT_APERTURE_SELECT+i, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         }
 
+        sdl_render_text_and_register_event(
+            pane, 0, pane->h-ROW2Y(1,LARGE_FONT), LARGE_FONT,
+            auto_init_state == 0 ? "AUTO_INIT_START" : "AUTO_INIT_STOP", 
+            SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_AUTO_INIT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -464,27 +482,36 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
             int requested_aperture_idx = event->event_id - SDL_EVENT_APERTURE_SELECT;
             run_compute_thread(requested_aperture_idx, -1, -1);
             break; }
+        case SDL_EVENT_AUTO_INIT: {
+            auto_init_state = (auto_init_state == 0 ? 1 : 0);
+            break; }
         case SDL_EVENT_KEY_LEFT_ARROW:
         case SDL_EVENT_KEY_RIGHT_ARROW: {
-            int current_z_mm;
-            double requested_z = z + (event->event_id == SDL_EVENT_KEY_LEFT_ARROW ? -.010 : +.010);
+            //int current_z_mm;
+            double requested_z;
 
+#if 0
             current_z_mm = nearbyint(z*1000);
-            assert(current_z_mm >= 0 && current_z_mm <= 3000);
+            assert(current_z_mm >= MIN_Z*1000 && current_z_mm <= MAX_Z*1000);
             if ((current_z_mm == 0 && event->event_id == SDL_EVENT_KEY_LEFT_ARROW) || 
                 (current_z_mm == 3000 && event->event_id == SDL_EVENT_KEY_RIGHT_ARROW))
             {
                 break;
             }
+#endif
 
-            requested_z = z + (event->event_id == SDL_EVENT_KEY_LEFT_ARROW ? -.100 : +.100);
+            requested_z = z + (event->event_id == SDL_EVENT_KEY_LEFT_ARROW ? -DELTA_Z : DELTA_Z);
+            if (requested_z < MIN_Z-.001 || requested_z > MAX_Z+.001) {
+                break;
+            }
             run_compute_thread(-1, -1, requested_z);
             break; }
         case SDL_EVENT_KEY_UP_ARROW:
         case SDL_EVENT_KEY_DOWN_ARROW: {
-            int current_wavelen_nm;
+            //int current_wavelen_nm;
             double requested_wavelen;
 
+#if 0
             current_wavelen_nm = nearbyint(wavelen*1e9);
             assert(current_wavelen_nm >= 400 && current_wavelen_nm <= 750);
             if ((current_wavelen_nm == 400 && event->event_id == SDL_EVENT_KEY_DOWN_ARROW) || 
@@ -492,8 +519,12 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
             {
                 break;
             }
+#endif
 
-            requested_wavelen = wavelen + (event->event_id == SDL_EVENT_KEY_DOWN_ARROW ? -25e-9 : +25e-9);
+            requested_wavelen = wavelen + (event->event_id == SDL_EVENT_KEY_DOWN_ARROW ? -DELTA_WAVLEN : DELTA_WAVLEN);
+            if (requested_wavelen < MIN_WAVLEN-1e-9 || requested_wavelen > MAX_WAVLEN+1e-9) {
+                break;
+            }
             run_compute_thread(-1, requested_wavelen, -1);
             break; }
         }
@@ -524,10 +555,10 @@ static void run_compute_thread(int requested_aperture_idx, double requested_wave
 {
     pthread_t tid;
 
-    if (compute_in_progress) return;
+    if (compute_completion_time == 0) return;
 
-    INFO("requested_aperture_idx=%d  requested_wavelen=%0.0lf nm  requested_z=%0.3lf m\n",
-         requested_aperture_idx, requested_wavelen*1e9, requested_z);
+    //INFO("requested_aperture_idx=%d  requested_wavelen=%0.0lf nm  requested_z=%0.3lf m\n",
+    //     requested_aperture_idx, requested_wavelen*1e9, requested_z);
 
     if (requested_aperture_idx != -1) aperture_idx = requested_aperture_idx;
     if (requested_wavelen != -1) wavelen = requested_wavelen;
@@ -535,7 +566,7 @@ static void run_compute_thread(int requested_aperture_idx, double requested_wave
 
     memset(screen, 0, sizeof(screen));
 
-    compute_in_progress = true;
+    compute_completion_time = 0;
     pthread_create(&tid, NULL, compute_thread, NULL);
 }
 
@@ -550,14 +581,15 @@ static void *compute_thread(void *cx)
 
     // xxx make saved_results dir part of git repo
 
-    sprintf(filename, "saved_results/%s__%d__%0.3lf__dat", 
-            aperture[aperture_idx].full_name, (int)(wavelen*1e9), z);
+    sprintf(filename, "saved_results/%s__%d__%0.3lf__.dat", 
+            aperture[aperture_idx].full_name, (int)nearbyint(wavelen*1e9), z);
+    INFO("filename = '%s'\n", filename);
 
     fd = open(filename, O_RDONLY);
     if (fd != -1) {
         read(fd, screen, sizeof(screen));
         close(fd);
-        compute_in_progress = false;
+        compute_completion_time = microsec_timer();;
         return NULL;
     }
 
@@ -569,7 +601,7 @@ static void *compute_thread(void *cx)
     write(fd, screen, sizeof(screen));
     close(fd);
 
-    compute_in_progress = false;
+    compute_completion_time = microsec_timer();;
     return NULL;
 }
 
@@ -612,3 +644,50 @@ static void get_screen(void)  // xxx name
         }
     }
 }
+
+// -----------------  AUTO INIT  -------------------------------------------------
+
+static void auto_init(void *cx)
+{
+    static int auto_init_aperture_idx;
+    static double auto_init_wavelen;
+    static double auto_init_z;
+
+    // if auto_init is not active then return
+    if (auto_init_state == 0) return;
+
+    // if auto_init was just activitated then init state variables
+    // xxx use defines for the wavelne and z range0
+    if (auto_init_state == 1) {
+        INFO("auto_init starting\n");
+        auto_init_state = 2;
+        auto_init_aperture_idx = 0;
+        auto_init_wavelen = MIN_WAVLEN;
+        auto_init_z = MIN_Z;
+    }
+
+    // if xxx comment
+    uint64_t cct = compute_completion_time;
+    if (cct == 0 || microsec_timer() - cct < 1000000) return;
+
+    // run_compute_thread
+    run_compute_thread(auto_init_aperture_idx, auto_init_wavelen, auto_init_z);
+
+    // advance z, wavelen, and aperture_idx
+    auto_init_z += DELTA_Z;
+    if (auto_init_z > MAX_Z+.001) {
+        auto_init_z = MIN_Z;
+        auto_init_wavelen += DELTA_WAVLEN;
+        if (auto_init_wavelen > MAX_WAVLEN+1e-9) {
+            auto_init_wavelen = MIN_WAVLEN;
+            auto_init_aperture_idx++;
+        }
+    }
+
+    // if aperture_idx has reached max then disable auto_init
+    if (auto_init_aperture_idx == max_aperture) {
+        INFO("auto_init completed\n");
+        auto_init_state = 0;
+    }
+}
+
