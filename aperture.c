@@ -54,6 +54,9 @@ int aperture_init(void)
         max_aperture++;
     }
 
+    // if no apertures defined then error
+    if (max_aperture == 0) goto error;
+
     fclose(fp);
     return 0;
 

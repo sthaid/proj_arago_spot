@@ -6,5 +6,5 @@
    
 rh          0.3                 diameter
 ss          0.15,2.0            width,height
-ring        6,3                 id,od
+ring        6,30                id,od
 
