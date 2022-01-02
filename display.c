@@ -71,6 +71,7 @@ int display_init(bool swap_white_black)
 
     //  xxx comment
     run_compute_thread(0, 525, 2000); // xxx defines
+    //run_compute_thread(2, 525, 2000); // xxx defines
 
     // return success
     return 0;

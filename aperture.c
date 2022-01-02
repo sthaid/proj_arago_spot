@@ -7,6 +7,7 @@
 static void rh_init(double diameter_mm);
 static void ring_init(double id, double od);
 static void ss_init(double width, double height);
+static void ds_init(double width, double height, double separation);
 
 // -----------------  APERTURE API ROUTINES  ---------------------------------
 
@@ -43,6 +44,9 @@ int aperture_init(void)
         } else if (strcmp(name, "ss") == 0) {
             if (sscanf(attributes, "%lf,%lf", &x->ss.width_mm, &x->ss.height_mm) != 2) goto error;
             sprintf(x->full_name, "ss__%0.3lf__%0.3lf", x->ss.width_mm, x->ss.height_mm);
+        } else if (strcmp(name, "ds") == 0) {
+            if (sscanf(attributes, "%lf,%lf,%lf", &x->ds.width_mm, &x->ds.height_mm, &x->ds.separation_mm) != 3) goto error;
+            sprintf(x->full_name, "ds__%0.3lf__%0.3lf__%0.3lf", x->ss.width_mm, x->ss.height_mm, x->ds.separation_mm);
         } else if (strcmp(name, "ring") == 0) {
             if (sscanf(attributes, "%lf,%lf", &x->ring.id_mm, &x->ring.od_mm) != 2) goto error;
             sprintf(x->full_name, "ring__%0.3lf__%0.3lf", x->ring.id_mm, x->ring.od_mm);
@@ -77,6 +81,8 @@ void aperture_select(int idx)
         rh_init(x->rh.diameter_mm/1000);
     } else if (strcmp(x->name, "ss") == 0) {
         ss_init(x->ss.width_mm/1000, x->ss.height_mm/1000);
+    } else if (strcmp(x->name, "ds") == 0) {
+        ds_init(x->ds.width_mm/1000, x->ds.height_mm/1000, x->ds.separation_mm/1000);
     } else if (strcmp(x->name, "ring") == 0) {
         ring_init(x->ring.id_mm/1000, x->ring.od_mm/1000);
     } else {
@@ -94,7 +100,7 @@ static void rh_init(double diameter)
     for (int x = 0; x < N; x++) {
         for (int y = 0; y < N; y++) {
             if (square((x-x_ctr)*ELEM_SIZE) + square((y-y_ctr)*ELEM_SIZE) <= square(diameter/2)) {
-                buff[x][y] = 1;
+                buff[y][x] = 1;
             }
         }
     }
@@ -109,7 +115,7 @@ static void ring_init(double id, double od)
         for (int y = 0; y < N; y++) {
             double tmp = square((x-x_ctr)*ELEM_SIZE) + square((y-y_ctr)*ELEM_SIZE);
             if (tmp >= square(id/2) && tmp <= square(od/2)) {
-                buff[x][y] = 1;
+                buff[y][x] = 1;
             }
         }
     }
@@ -122,12 +128,28 @@ static void ss_init(double width, double height)
 
     for (int x = 0; x < N; x++) {
         for (int y = 0; y < N; y++) {
-            if (fabs(y-y_ctr)*ELEM_SIZE < width/2 &&
-                fabs(x-x_ctr)*ELEM_SIZE < height/2)
+            if (fabs(y-y_ctr)*ELEM_SIZE < height/2 &&
+                fabs(x-x_ctr)*ELEM_SIZE < width/2)
             {
-                buff[x][y] = 1;
+                buff[y][x] = 1;
             }
         }
     }
 }
 
+static void ds_init(double width, double height, double separation)
+{
+    double x_ctr = (N-1)/2.;
+    double y_ctr = (N-1)/2.;
+
+    for (int x = 0; x < N; x++) {
+        for (int y = 0; y < N; y++) {
+            if (fabs(y-y_ctr)*ELEM_SIZE < height/2 &&
+                fabs(x-x_ctr)*ELEM_SIZE > (separation-width)/2 &&
+                fabs(x-x_ctr)*ELEM_SIZE < (separation+width)/2)
+            {
+                buff[y][x] = 1;
+            }
+        }
+    }
+}

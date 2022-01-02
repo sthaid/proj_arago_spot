@@ -42,6 +42,11 @@ typedef struct {
             double height_mm;
         } ss;
         struct {
+            double width_mm;
+            double height_mm;
+            double separation_mm;
+        } ds;
+        struct {
             double id_mm;
             double od_mm;
         } ring;

@@ -6,5 +6,7 @@
    
 rh          0.3                 diameter
 ss          0.15,2.0            width,height
+ds          0.15,2.0,0.5        width,height,seperation
+ds          10,10,20            width,height,seperation
 ring        6,30                id,od
 
