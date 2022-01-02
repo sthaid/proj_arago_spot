@@ -245,38 +245,35 @@ static void render_screen(
 {
     int i,j;
     int texture_width, texture_height;
+    uint8_t r,g,b;
 
     // initialize pixels from screen data
+    sdl_wavelen_to_rgb(wavelen*1e9, &r, &g, &b);
     for (i = 0; i < MAX_SCREEN; i++) {
         for (j = 0; j < MAX_SCREEN; j++) {
-            int green;
+            double factor;
 
             // this translates the calculated screen intensity (which has
             // been normalized to range 0 .. 1 by the sim_get_scren routine)
             // to a pixel intensity; two algorithm choices are provided:
             // - 0: logarithmic  (default)
             // - 1: linear
-
-// xxx  AAA
-// void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b)
-
+            // xxx comments
             if (intensity_algorithm == 0) {
-                green = ( screen[i][j] == 0 
-                          ? 0 
-                          : 255.99 * (1 + 0.2 * log(screen[i][j])) );
-                if (green < 0) green = 0;
+                if (screen[i][j] == 0) {
+                    factor = 0;
+                } else {
+                    factor = (1 + 0.2 * log(screen[i][j]));
+                    if (factor < 0) factor = 0;
+                }
             } else if (intensity_algorithm == 1) {
-                green = 255.99 * screen[i][j];
+                factor = screen[i][j];
             } else {
                 FATAL("invalid intensity_algorithm %d\n", intensity_algorithm);
             }
-            if (green < 0 || green > 255) {
-                ERROR("green %d\n", green);
-                green = (green < 0 ? 0 : 255);
-            }
 
             // set the display pixel values 
-            pixels[i][j] = (0xff << 24) | (green << 8);
+            pixels[i][j] = PIXEL( (int)(r*factor), (int)(g*factor), (int)(b*factor));
         }
     }
 
@@ -442,7 +439,7 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
                           "Z       = %0.3lf m", z);
         sdl_render_printf(pane, 0, pane->h-ROW2Y(6,LARGE_FONT), 
                           LARGE_FONT, SDL_WHITE, SDL_BLACK, 
-                          "WAVELEN = %0.3lf nm", wavelen*1e9);
+                          "WAVELEN = %d nm", (int)nearbyint(wavelen*1e9));
         
         // register for events ...
         // - aperture select
@@ -469,14 +466,34 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
             break; }
         case SDL_EVENT_KEY_LEFT_ARROW:
         case SDL_EVENT_KEY_RIGHT_ARROW: {
+            int current_z_mm;
             double requested_z = z + (event->event_id == SDL_EVENT_KEY_LEFT_ARROW ? -.010 : +.010);
-// xxx limit
+
+            current_z_mm = nearbyint(z*1000);
+            assert(current_z_mm >= 0 && current_z_mm <= 3000);
+            if ((current_z_mm == 0 && event->event_id == SDL_EVENT_KEY_LEFT_ARROW) || 
+                (current_z_mm == 3000 && event->event_id == SDL_EVENT_KEY_RIGHT_ARROW))
+            {
+                break;
+            }
+
+            requested_z = z + (event->event_id == SDL_EVENT_KEY_LEFT_ARROW ? -.100 : +.100);
             run_compute_thread(-1, -1, requested_z);
             break; }
         case SDL_EVENT_KEY_UP_ARROW:
         case SDL_EVENT_KEY_DOWN_ARROW: {
-            double requested_wavelen = wavelen + (event->event_id == SDL_EVENT_KEY_DOWN_ARROW ? -25e-9 : +25e-9);
-// xxx limit
+            int current_wavelen_nm;
+            double requested_wavelen;
+
+            current_wavelen_nm = nearbyint(wavelen*1e9);
+            assert(current_wavelen_nm >= 400 && current_wavelen_nm <= 750);
+            if ((current_wavelen_nm == 400 && event->event_id == SDL_EVENT_KEY_DOWN_ARROW) || 
+                (current_wavelen_nm == 750 && event->event_id == SDL_EVENT_KEY_UP_ARROW))
+            {
+                break;
+            }
+
+            requested_wavelen = wavelen + (event->event_id == SDL_EVENT_KEY_DOWN_ARROW ? -25e-9 : +25e-9);
             run_compute_thread(-1, requested_wavelen, -1);
             break; }
         }
