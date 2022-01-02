@@ -48,6 +48,7 @@ static int      auto_init_state;
 
 static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
+static void common_key_controls(int key);
 static void run_compute_thread(int requested_aperture_idx, int requested_wavelen_nm, int requested_z_mm);
 static void auto_init(void *cx);
 
@@ -251,8 +252,11 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         case SDL_EVENT_INTENSITY_ALGORITHM:
             intensity_algorithm = (intensity_algorithm + 1) % MAX_INTENSITY_ALGORITHM;
             break;
+        default: 
+            common_key_controls(event->event_id);
+            break;
         }
-        // xxx keyboard events here and not in ctrl pane  OR in both
+
         return PANE_HANDLER_RET_DISPLAY_REDRAW;
     }
 
@@ -480,37 +484,9 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
         case SDL_EVENT_AUTO_INIT: {
             auto_init_state = (auto_init_state == 0 ? 1 : 0);
             break; }
-        case SDL_EVENT_KEY_LEFT_ARROW:
-        case SDL_EVENT_KEY_RIGHT_ARROW:
-        case SDL_EVENT_KEY_SHIFT_LEFT_ARROW:
-        case SDL_EVENT_KEY_SHIFT_RIGHT_ARROW: {
-            int requested_z_mm = 
-                    (event->event_id == SDL_EVENT_KEY_SHIFT_LEFT_ARROW  ? MIN_Z_MM :
-                     event->event_id == SDL_EVENT_KEY_SHIFT_RIGHT_ARROW ? MAX_Z_MM :
-                     event->event_id == SDL_EVENT_KEY_LEFT_ARROW        ? z_mm - DELTA_Z_MM :
-                                                                          z_mm + DELTA_Z_MM);
-            if (requested_z_mm == z_mm || requested_z_mm < MIN_Z_MM || requested_z_mm > MAX_Z_MM) {
-                break;
-            }
-            run_compute_thread(-1, -1, requested_z_mm);
-            break; }
-        case SDL_EVENT_KEY_DOWN_ARROW:
-        case SDL_EVENT_KEY_UP_ARROW:
-        case SDL_EVENT_KEY_SHIFT_DOWN_ARROW:
-        case SDL_EVENT_KEY_SHIFT_UP_ARROW: {
-            int requested_wavelen_nm = 
-                    (event->event_id == SDL_EVENT_KEY_SHIFT_DOWN_ARROW ? MIN_WAVLEN_NM :
-                     event->event_id == SDL_EVENT_KEY_SHIFT_UP_ARROW   ? MAX_WAVLEN_NM :
-                     event->event_id == SDL_EVENT_KEY_DOWN_ARROW       ? wavelen_nm - DELTA_WAVLEN_NM :
-                                                                         wavelen_nm + DELTA_WAVLEN_NM);
-            if (requested_wavelen_nm == wavelen_nm || 
-                requested_wavelen_nm < MIN_WAVLEN_NM || 
-                requested_wavelen_nm > MAX_WAVLEN_NM) 
-            {
-                break;
-            }
-            run_compute_thread(-1, requested_wavelen_nm, -1);
-            break; }
+        default: 
+            common_key_controls(event->event_id);
+            break;
         }
 
         return PANE_HANDLER_RET_DISPLAY_REDRAW;
@@ -530,6 +506,45 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
+// -----------------  COMMON KEY CONTROLS  --------------------------------------
+
+static void common_key_controls(int key)
+{
+    switch (key) {
+    case SDL_EVENT_KEY_LEFT_ARROW:
+    case SDL_EVENT_KEY_RIGHT_ARROW:
+    case SDL_EVENT_KEY_SHIFT_LEFT_ARROW:
+    case SDL_EVENT_KEY_SHIFT_RIGHT_ARROW: {
+        int requested_z_mm = 
+                (key == SDL_EVENT_KEY_SHIFT_LEFT_ARROW  ? MIN_Z_MM :
+                 key == SDL_EVENT_KEY_SHIFT_RIGHT_ARROW ? MAX_Z_MM :
+                 key == SDL_EVENT_KEY_LEFT_ARROW        ? z_mm - DELTA_Z_MM :
+                                                          z_mm + DELTA_Z_MM);
+        if (requested_z_mm == z_mm || requested_z_mm < MIN_Z_MM || requested_z_mm > MAX_Z_MM) {
+            break;
+        }
+        run_compute_thread(-1, -1, requested_z_mm);
+        break; }
+    case SDL_EVENT_KEY_DOWN_ARROW:
+    case SDL_EVENT_KEY_UP_ARROW:
+    case SDL_EVENT_KEY_SHIFT_DOWN_ARROW:
+    case SDL_EVENT_KEY_SHIFT_UP_ARROW: {
+        int requested_wavelen_nm = 
+                (key == SDL_EVENT_KEY_SHIFT_DOWN_ARROW ? MIN_WAVLEN_NM :
+                 key == SDL_EVENT_KEY_SHIFT_UP_ARROW   ? MAX_WAVLEN_NM :
+                 key == SDL_EVENT_KEY_DOWN_ARROW       ? wavelen_nm - DELTA_WAVLEN_NM :
+                                                         wavelen_nm + DELTA_WAVLEN_NM);
+        if (requested_wavelen_nm == wavelen_nm || 
+            requested_wavelen_nm < MIN_WAVLEN_NM || 
+            requested_wavelen_nm > MAX_WAVLEN_NM) 
+        {
+            break;
+        }
+        run_compute_thread(-1, requested_wavelen_nm, -1);
+        break; }
+    }
+}
+
 // -----------------  COMPUTE THREAD  --------------------------------------------
 
 static void *compute_thread(void *cx);
@@ -541,8 +556,8 @@ static void run_compute_thread(int requested_aperture_idx, int requested_wavelen
 
     if (compute_in_progress) return;
 
-    //INFO("requested_aperture_idx=%d  requested_wavelen_nm=%d nm  requested_z=%0.3lf m\n",
-    //     requested_aperture_idx, requested_wavelen_nm, requested_z);
+    INFO("requested_aperture_idx=%d  requested_wavelen_nm=%d nm  requested_z_mm=%d mm\n",
+         requested_aperture_idx, requested_wavelen_nm, requested_z_mm);
 
     if (requested_aperture_idx != -1) aperture_idx = requested_aperture_idx;
     if (requested_wavelen_nm != -1) wavelen_nm = requested_wavelen_nm;
@@ -563,7 +578,7 @@ static void *compute_thread(void *cx)
 
     sprintf(filename, "saved_results/%s__%d__%d__.dat", 
             aperture[aperture_idx].full_name, wavelen_nm, z_mm);
-    INFO("filename = '%s'\n", filename);
+    //INFO("filename = '%s'\n", filename);
 
     fd = open(filename, O_RDONLY);
     if (fd != -1) {
