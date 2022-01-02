@@ -1,4 +1,5 @@
-# UNDER CONSTRUCTION
+# Arago Spot - UNDER CONSTRUCTION
 
-Arago Spot
+## Screenshot
 
+![screenshot.png](/assets/screenshot.png)
