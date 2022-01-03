@@ -1,3 +1,4 @@
+// xxx initial alg, or  make it part of the config
 // xxx use define for compute_completed
 
 #include "common.h"
@@ -9,18 +10,18 @@
 #define LARGE_FONT 24
 #define SMALL_FONT 16 
 
-#define MAX_INTENSITY_ALGORITHM  2  // xxx?
-
 #define MAX_SCREEN 500
-#define SCREEN_ELEMENT_SIZE  (1000 * TOTAL_SIZE / MAX_SCREEN)   // xxx mm
+#define SCREEN_ELEMENT_SIZE_MM  (1000 * TOTAL_SIZE / MAX_SCREEN)
 
-#define MIN_Z_MM     0     // xxx comment or assert requirements
-#define MAX_Z_MM     3000
-#define DELTA_Z_MM   100
+#define MIN_Z_MM           0     // these must have values so that z_mm will
+#define MAX_Z_MM           3000  // not exceed the min/max_z bounds
+#define DELTA_Z_MM         100
+#define INITIAL_Z_MM       2000
 
-#define MIN_WAVLEN_NM   400     // xxx comment or assert requirements
-#define MAX_WAVLEN_NM   750
-#define DELTA_WAVLEN_NM 25
+#define MIN_WAVLEN_NM      400   // these must have values so that wavelen_nm will
+#define MAX_WAVLEN_NM      750   // not exceed the min_max_wavelen bounds
+#define DELTA_WAVLEN_NM    25
+#define INITIAL_WAVELEN_NM 525
 
 //
 // variables
@@ -29,10 +30,10 @@
 static int      win_width;
 static int      win_height;
 
-static int      intensity_algorithm = 0;
+static int      intensity_algorithm = 1;
 
-static double   sensor_width  = .1;   // mm  xxx name
-static double   sensor_height = .1;   // mm
+static double   sensor_width_mm  = .1;
+static double   sensor_height_mm = .1;
 static bool     sensor_lines_enabled = false;
 
 static double   screen[MAX_SCREEN][MAX_SCREEN];
@@ -56,7 +57,7 @@ static void auto_init(void *cx);
 
 int display_init(bool swap_white_black)
 {
-    #define REQUESTED_WIN_WIDTH  800
+    #define REQUESTED_WIN_WIDTH  900
     #define REQUESTED_WIN_HEIGHT 625
 
     // init sdl, and get actual window width and height
@@ -69,9 +70,8 @@ int display_init(bool swap_white_black)
     INFO("REQUESTED win_width=%d win_height=%d\n", REQUESTED_WIN_WIDTH, REQUESTED_WIN_HEIGHT);
     INFO("ACTUAL    win_width=%d win_height=%d\n", win_width, win_height);
 
-    //  xxx comment
-    run_compute_thread(0, 525, 2000); // xxx defines
-    //run_compute_thread(2, 525, 2000); // xxx defines
+    //  run compute_thread to calculate the initial screen
+    run_compute_thread(0, INITIAL_WAVELEN_NM, INITIAL_Z_MM);
 
     // return success
     return 0;
@@ -113,6 +113,8 @@ void display_hndlr(void)
 }
 
 // -----------------  INTERFEROMETER PATTERN PANE HANDLER  ----------------------
+
+#define MAX_INTENSITY_ALGORITHM  2
 
 static void render_screen(
                 int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], int wavelen_nm,
@@ -169,7 +171,6 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         //          621
 
         // xxx if no wavelen yet
-
         // xxx comments
 
         // render the sections that make up this pane, as described above
@@ -197,7 +198,7 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
 
         // if enabled then draw horizontal lines accross middle to represent the top and bottom of the sensor
         if (sensor_lines_enabled) {
-            int sensor_height_pixels = sensor_height / SCREEN_ELEMENT_SIZE;
+            int sensor_height_pixels = sensor_height_mm / SCREEN_ELEMENT_SIZE_MM;
             int sensor_min_y = MAX_SCREEN/2 - sensor_height_pixels/2;
             int sensor_max_y = sensor_min_y + sensor_height_pixels - 1;
 
@@ -208,13 +209,13 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         }
 
         // register events
-        sprintf(sensor_width_str, "W=%3.1f", sensor_width);
+        sprintf(sensor_width_str, "W=%3.1f", sensor_width_mm);
         sdl_render_text_and_register_event(
                 pane, 0, MAX_SCREEN+1, LARGE_FONT,
                 sensor_width_str, SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_SENSOR_WIDTH, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
-        sprintf(sensor_height_str, "H=%3.1f", sensor_height);
+        sprintf(sensor_height_str, "H=%3.1f", sensor_height_mm);
         sdl_render_text_and_register_event(
                 pane, COL2X(6,LARGE_FONT), MAX_SCREEN+1, LARGE_FONT,
                 sensor_height_str, SDL_LIGHT_BLUE, SDL_BLACK,
@@ -241,16 +242,16 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
     if (request == PANE_HANDLER_REQ_EVENT) {
         switch (event->event_id) {
         case SDL_EVENT_SENSOR_WIDTH:
-            if (event->mouse_wheel.delta_y > 0) sensor_width += .1;
-            if (event->mouse_wheel.delta_y < 0) sensor_width -= .1;
-            if (sensor_width < 0.1) sensor_width = 0.1;
-            if (sensor_width > 5.0) sensor_width = 5.0;
+            if (event->mouse_wheel.delta_y > 0) sensor_width_mm += .1;
+            if (event->mouse_wheel.delta_y < 0) sensor_width_mm -= .1;
+            if (sensor_width_mm < 0.1) sensor_width_mm = 0.1;
+            if (sensor_width_mm > 5.0) sensor_width_mm = 5.0;
             break;
         case SDL_EVENT_SENSOR_HEIGHT:
-            if (event->mouse_wheel.delta_y > 0) sensor_height += .1;
-            if (event->mouse_wheel.delta_y < 0) sensor_height -= .1;
-            if (sensor_height < 0.1) sensor_height = 0.1;
-            if (sensor_height > 5.0) sensor_height = 5.0;
+            if (event->mouse_wheel.delta_y > 0) sensor_height_mm += .1;
+            if (event->mouse_wheel.delta_y < 0) sensor_height_mm -= .1;
+            if (sensor_height_mm < 0.1) sensor_height_mm = 0.1;
+            if (sensor_height_mm > 5.0) sensor_height_mm = 5.0;
             break;
         case SDL_EVENT_SENSOR_LINES:
             sensor_lines_enabled = !sensor_lines_enabled;
@@ -296,11 +297,10 @@ static void render_screen(
             double factor;
 
             // this translates the calculated screen intensity (which has
-            // been normalized to range 0 .. 1 by the sim_get_scren routine)
+            // been normalized to range 0 .. 1 by the get_scren routine)
             // to a pixel intensity; two algorithm choices are provided:
-            // - 0: logarithmic  (default)
+            // - 0: logarithmic
             // - 1: linear
-            // xxx comments
             if (intensity_algorithm == 0) {
                 if (screen[i][j] == 0) {
                     factor = 0;
@@ -346,15 +346,20 @@ static void render_intensity_graph(
     }
     sdl_render_lines(pane, graph, MAX_SCREEN, SDL_WHITE);
 
-    // xxx comments
-    y_top = y_bottom + 1;
+    //
+    // the remainder of this routine renders the x-axis of the intensity graph
+    //
 
     double tick_intvl, tick_loc;
     char tick_value_str[20];
     int tick_value, tick_value_loc, slen;
 
+    // set y_top to the location of the x-axis, just below the graph 
+    // which was rendered by the code above
+    y_top = y_bottom + 1;
+
     // convert 5mm to tick_intvl in pixel units
-    tick_intvl = 5 / SCREEN_ELEMENT_SIZE;
+    tick_intvl = 5 / SCREEN_ELEMENT_SIZE_MM;
 
     // starting at the center, adjust tick_loc to the left to 
     // find the first tick location
@@ -373,7 +378,7 @@ static void render_intensity_graph(
 
         // determine the tick value (in mm), and display it centered below the tick
         // - determine the tick_value based on the difference between tick_loc and the center
-        tick_value = nearbyint((tick_loc - MAX_SCREEN/2) * SCREEN_ELEMENT_SIZE);
+        tick_value = nearbyint((tick_loc - MAX_SCREEN/2) * SCREEN_ELEMENT_SIZE_MM);
         sprintf(tick_value_str, "%d", tick_value);
         // - determine the tick_value_loc, accounting for the string length of the tick_value_str
         slen = strlen(tick_value_str);
@@ -397,8 +402,8 @@ static double get_sensor_value(int screen_idx, double screen[MAX_SCREEN][MAX_SCR
     int i, j, cnt;
 
     // convert caller's sensor dimensions (in mm) to screen-elements
-    sensor_width_screen_elements = sensor_width / SCREEN_ELEMENT_SIZE;
-    sensor_height_screen_elements = sensor_height / SCREEN_ELEMENT_SIZE;
+    sensor_width_screen_elements = sensor_width_mm / SCREEN_ELEMENT_SIZE_MM;
+    sensor_height_screen_elements = sensor_height_mm / SCREEN_ELEMENT_SIZE_MM;
 
     // determine sensor location for indexing into the screen array;
     // these min/max values are used to compute an average sensor_value
@@ -463,7 +468,7 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
         for (row = 0, i = 0; i < max_aperture; i++, row++) {
             sdl_render_text_and_register_event(
                     pane, 0, ROW2Y(row,LARGE_FONT), LARGE_FONT,
-                    aperture[i].name, 
+                    aperture[i].full_name, 
                     aperture_idx == i ? SDL_GREEN : SDL_LIGHT_BLUE, SDL_BLACK,
                     SDL_EVENT_APERTURE_SELECT+i, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         }
@@ -559,6 +564,14 @@ static void get_screen(void);
 static void run_compute_thread(int requested_aperture_idx, int requested_wavelen_nm, int requested_z_mm)
 {
     pthread_t tid;
+    static pthread_attr_t attr;
+    static bool first_call = true;
+
+    if (first_call) {
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+        first_call = false;
+    }
 
     if (compute_in_progress) return;
 
@@ -572,15 +585,14 @@ static void run_compute_thread(int requested_aperture_idx, int requested_wavelen
     memset(screen, 0, sizeof(screen));
 
     compute_in_progress = true;
-    pthread_create(&tid, NULL, compute_thread, NULL);
+
+    pthread_create(&tid, &attr, compute_thread, NULL);
 }
 
 static void *compute_thread(void *cx)
 {
     int fd;
     char filename[200];
-
-    // xxx create detached
 
     sprintf(filename, "saved_results/%s__%d__%d__.dat", 
             aperture[aperture_idx].full_name, wavelen_nm, z_mm);
@@ -666,7 +678,7 @@ static void auto_init(void *cx)
         auto_init_z_mm = MIN_Z_MM;
     }
 
-    // if xxx comment
+    // if compute is currently in progress then return
     if (compute_in_progress) return;
 
     // run_compute_thread
