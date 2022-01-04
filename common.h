@@ -16,11 +16,10 @@
 #include <util_misc.h>
 #include <util_sdl.h>
 
-#define N           5000
-#define TOTAL_SIZE  .050
-#define ELEM_SIZE   (TOTAL_SIZE/N)
-
 // fft buffer
+#define N           5000
+#define TOTAL_SIZE  .050            // size of screen in meters
+#define ELEM_SIZE   (TOTAL_SIZE/N)  // size of single element, in meters
 complex buff[N][N];
 
 // display.c

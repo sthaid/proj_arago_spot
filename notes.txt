@@ -104,16 +104,16 @@ search
 
 https://en.wikipedia.org/wiki/Angular_spectrum_method
 https://www.egr.msu.edu/~fultras-web/background/asa.php
-
-https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.674.3630&rep=rep1&type=pdf
   pg 3
 
 http://www.fftw.org/fftw3.pdf
 
 https://rafael-fuente.github.io/simulating-diffraction-patterns-with-the-angular-spectrum-method-and-python.html
-https://rafael-fuente.github.io/simulating-diffraction-patterns-with-the-angular-spectrum-method-and-python.html
 
-it@github.com:rafael-fuente/diffractsim.gi
+https://en.wikipedia.org/wiki/Angular_spectrum_method
+https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.674.3630&rep=rep1&type=pdf
+https://rafael-fuente.github.io/simulating-diffraction-patterns-with-the-angular-spectrum-method-and-python.html
+https://github.com:rafael-fuente/diffractsim
 
 
 ======================================

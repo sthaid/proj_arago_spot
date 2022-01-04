@@ -1,5 +1,4 @@
 // xxx initial alg, or  make it part of the config
-// xxx use define for compute_completed
 
 #include "common.h"
 
@@ -170,16 +169,19 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         //          ----
         //          621
 
-        // xxx if no wavelen yet
-        // xxx comments
-
-        // render the sections that make up this pane, as described above
+        // if compute of a new screen is not in progress then make a 
+        // copy of the screen, z_mm, and wavelen_mm; the copy is made so that
+        // while a new screen is being computed this program can continue to 
+        // display the previous screen
         if (compute_in_progress == false) {
             memcpy(screen_copy, screen, sizeof(screen_copy));
             z_mm_copy = z_mm;
             wavelen_nm_copy = wavelen_nm;
         }
 
+        // render the screen and intensity graph;
+        // the intensity graph is what a sensor (of the selected size) would measure
+        //  accross the middle of the screen
         render_screen(0, MAX_SCREEN, screen_copy, wavelen_nm_copy, vars->texture, vars->pixels, pane);
         sdl_render_line(pane, 0,MAX_SCREEN, MAX_SCREEN-1,MAX_SCREEN, SDL_WHITE);
         render_intensity_graph(MAX_SCREEN+1, 120, screen_copy, pane);

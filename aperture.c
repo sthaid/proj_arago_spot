@@ -17,27 +17,34 @@ int aperture_init(void)
     int linenum=0;
     char s[200], name[100], attributes[100];
 
+    // open aperture definition file
     fp = fopen("aperture_defs", "r");
     if (fp == NULL) {
         ERROR("failed to open aperture_defs, %s\n", strerror(errno));
         return -1;
     }
 
+    // read lines from file
     while (fgets(s, sizeof(s), fp) != NULL) {
         linenum++;
 
+        // remove trailing newline char, and
+        // if line is comment or blank then continue
         s[strcspn(s, "\n")] = 0;
         if (s[0] == '#' || strspn(s, " ") == strlen(s)) {
             continue;
         }
 
+        // read the aperature definition name (rh,ring,ss,ds) and attributes
         if (sscanf(s, "%s%s", name, attributes) != 2) {
             goto error;
         }
 
+        // store name in aperture array
         aperture_t *x = &aperture[max_aperture];
-
         strcpy(x->name, name);
+
+        // based on name, scan the attributes and store their values in the aperture array
         if (strcmp(name, "rh") == 0) {
             if (sscanf(attributes, "%lf", &x->rh.diameter_mm) != 1) goto error;
             sprintf(x->full_name, "rh__%0.3lf", x->rh.diameter_mm);
@@ -55,16 +62,19 @@ int aperture_init(void)
         }
         INFO("%-4s - %s\n", x->name, x->full_name);
 
+        // keep track of the number of apertures defined
         max_aperture++;
     }
 
     // if no apertures defined then error
     if (max_aperture == 0) goto error;
 
+    // close file and return success
     fclose(fp);
     return 0;
 
 error:
+    // close file and return error
     fclose(fp);
     ERROR("line %d invalid\n", linenum);
     return -1;
@@ -72,6 +82,9 @@ error:
 
 void aperture_select(int idx)
 {
+    // this routine calls one of the private routines, defined below,
+    // which will init the fft buff for the selected aperture
+
     assert(idx >= 0 && idx < max_aperture);
     aperture_t *x = &aperture[idx];
 

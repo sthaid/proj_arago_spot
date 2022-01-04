@@ -1,34 +1,25 @@
-// xxx this file
-// - ASSERT N IS EVEN
-// - do fft in place
-// - does negative z make a difference
-// - use fftw_malloc ?
-// - better name for apply0
-
-// xxx other
-// - simplify graphcis interface ?
-// - zoom in and out 
-
-// title: angular_spectrum_method
-
-// references:
-//  https://rafael-fuente.github.io/simulating-diffraction-patterns-with-the-angular-spectrum-method-and-python.html
-
-//  --------------------------------------------------------------
-//  --------------------------------------------------------------
-//  --------------------------------------------------------------
+// References:
+// - https://en.wikipedia.org/wiki/Angular_spectrum_method
+// - https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.674.3630&rep=rep1&type=pdf
+// - https://rafael-fuente.github.io/simulating-diffraction-patterns-with-the-angular-spectrum-method-and-python.html
+// - https://github.com/rafael-fuente/diffractsim
+// - http://www.fftw.org/fftw3.pdf
 
 #include "common.h"
+
+// the calculation of kx and ky in multiply_by_propagation_term assumes N is even
+_Static_assert((N & 1) == 0);
 
 static fftw_plan   fwd;
 static fftw_plan   back;
 
 // -------------------- CODE ------------------------------
 
-static void apply(double wavelen, double z);
+static void multiply_by_propagation_term(double wavelen, double z);
 
 int angular_spectrum_method_init(void)
 {
+    // print values of defines
     printf("N          = %d\n", N);
     printf("TOTAL_SIZE = %0.3f mm\n", TOTAL_SIZE * 1000);
     printf("ELEM_SIZE  = %0.3f mm\n", ELEM_SIZE * 1000);
@@ -37,18 +28,18 @@ int angular_spectrum_method_init(void)
     fwd  = fftw_plan_dft_2d(N, N, (complex*)buff, (complex*)buff, FFTW_FORWARD, FFTW_ESTIMATE);
     back = fftw_plan_dft_2d(N, N, (complex*)buff, (complex*)buff, FFTW_BACKWARD, FFTW_ESTIMATE);
 
+    // return success
     return 0;
 }
 
 void angular_spectrum_method_execute(double wavelen, double z)
 {
-    // xxx comments
     fftw_execute(fwd);
-    apply(wavelen, z);  // xxx better name
+    multiply_by_propagation_term(wavelen, z);
     fftw_execute(back);
 }
 
-static void apply(double wavelen, double z)
+static void multiply_by_propagation_term(double wavelen, double z)
 {
     double kx, ky, kz;
 
