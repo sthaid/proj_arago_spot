@@ -1,5 +1,3 @@
-// xxx initial alg, or  make it part of the config
-
 #include "common.h"
 
 //
@@ -28,8 +26,6 @@
 
 static int      win_width;
 static int      win_height;
-
-static int      intensity_algorithm = 1;
 
 static double   sensor_width_mm  = .1;
 static double   sensor_height_mm = .1;
@@ -116,7 +112,8 @@ void display_hndlr(void)
 #define MAX_INTENSITY_ALGORITHM  2
 
 static void render_screen(
-                int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], int wavelen_nm,
+                int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN],
+                int wavelen_nm, int intensity_algorithm,
                 texture_t texture, unsigned int pixels[MAX_SCREEN][MAX_SCREEN], 
                 rect_t *pane);
 static void render_intensity_graph(
@@ -135,6 +132,9 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
    #define SDL_EVENT_SENSOR_HEIGHT        (SDL_EVENT_USER_DEFINED + 1)
    #define SDL_EVENT_SENSOR_LINES         (SDL_EVENT_USER_DEFINED + 2)
    #define SDL_EVENT_INTENSITY_ALGORITHM  (SDL_EVENT_USER_DEFINED + 3)
+
+    static double screen_copy[MAX_SCREEN][MAX_SCREEN];
+    static int z_mm_copy, wavelen_nm_copy, intensity_algorithm_copy;
 
     // ----------------------------
     // -------- INITIALIZE --------
@@ -157,9 +157,6 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
         char   intensity_algorithm_str[20];
         char   title_str[100];
 
-        static double screen_copy[MAX_SCREEN][MAX_SCREEN];
-        static int z_mm_copy, wavelen_nm_copy;
-
         // this pane is vertically arranged as follows
         // y-range  y-span  description 
         // -------  ------  -----------
@@ -177,12 +174,14 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
             memcpy(screen_copy, screen, sizeof(screen_copy));
             z_mm_copy = z_mm;
             wavelen_nm_copy = wavelen_nm;
+            intensity_algorithm_copy = aperture[aperture_idx].intensity_algorithm;
         }
 
         // render the screen and intensity graph;
         // the intensity graph is what a sensor (of the selected size) would measure
         //  accross the middle of the screen
-        render_screen(0, MAX_SCREEN, screen_copy, wavelen_nm_copy, vars->texture, vars->pixels, pane);
+        render_screen(0, MAX_SCREEN, screen_copy, wavelen_nm_copy, intensity_algorithm_copy,
+                      vars->texture, vars->pixels, pane);
         sdl_render_line(pane, 0,MAX_SCREEN, MAX_SCREEN-1,MAX_SCREEN, SDL_WHITE);
         render_intensity_graph(MAX_SCREEN+1, 120, screen_copy, pane);
 
@@ -228,7 +227,7 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
                 "SENS", SDL_LIGHT_BLUE, SDL_BLACK,
                 SDL_EVENT_SENSOR_LINES, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
-        sprintf(intensity_algorithm_str, "ALG=%d", intensity_algorithm);
+        sprintf(intensity_algorithm_str, "ALG=%d", intensity_algorithm_copy);
         sdl_render_text_and_register_event(
                 pane, pane->w-COL2X(5,LARGE_FONT), 0, LARGE_FONT,
                 intensity_algorithm_str, SDL_LIGHT_BLUE, SDL_BLACK,
@@ -259,7 +258,8 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
             sensor_lines_enabled = !sensor_lines_enabled;
             break;
         case SDL_EVENT_INTENSITY_ALGORITHM:
-            intensity_algorithm = (intensity_algorithm + 1) % MAX_INTENSITY_ALGORITHM;
+            intensity_algorithm_copy = (intensity_algorithm_copy + 1) % MAX_INTENSITY_ALGORITHM;
+            aperture[aperture_idx].intensity_algorithm = intensity_algorithm_copy;
             break;
         default: 
             common_key_controls(event->event_id);
@@ -284,7 +284,8 @@ static int interference_pattern_pane_hndlr(pane_cx_t * pane_cx, int request, voi
 }
 
 static void render_screen(
-                int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], int wavelen_nm,
+                int y_top, int y_span, double screen[MAX_SCREEN][MAX_SCREEN], 
+                int wavelen_nm, int intensity_algorithm,
                 texture_t texture, unsigned int pixels[MAX_SCREEN][MAX_SCREEN], 
                 rect_t *pane)
 {
@@ -492,6 +493,9 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
         switch (event->event_id) {
         case SDL_EVENT_APERTURE_SELECT ... SDL_EVENT_APERTURE_SELECT+MAX_APERTURE-1: {
             int requested_aperture_idx = event->event_id - SDL_EVENT_APERTURE_SELECT;
+            if (requested_aperture_idx == aperture_idx) {
+                break;
+            }
             run_compute_thread(requested_aperture_idx, -1, -1);
             break; }
         case SDL_EVENT_AUTO_INIT: {

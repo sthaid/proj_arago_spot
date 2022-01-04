@@ -32,6 +32,7 @@ void display_hndlr(void);
 typedef struct {
     char name[20];
     char full_name[100];
+    int intensity_algorithm;
     union {
         struct {
             double diameter_mm;

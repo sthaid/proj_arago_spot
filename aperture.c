@@ -16,6 +16,7 @@ int aperture_init(void)
     FILE *fp;
     int linenum=0;
     char s[200], name[100], attributes[100];
+    int intensity_algorithm;
 
     // open aperture definition file
     fp = fopen("aperture_defs", "r");
@@ -36,13 +37,14 @@ int aperture_init(void)
         }
 
         // read the aperature definition name (rh,ring,ss,ds) and attributes
-        if (sscanf(s, "%s%s", name, attributes) != 2) {
+        if (sscanf(s, "%s %d %s", name, &intensity_algorithm, attributes) != 3) {
             goto error;
         }
 
-        // store name in aperture array
+        // store name and intensity_algorithm in aperture array
         aperture_t *x = &aperture[max_aperture];
         strcpy(x->name, name);
+        x->intensity_algorithm = intensity_algorithm;
 
         // based on name, scan the attributes and store their values in the aperture array
         if (strcmp(name, "rh") == 0) {
