@@ -527,6 +527,17 @@ static int control_pane_hndlr(pane_cx_t * pane_cx, int request, void * init_para
 
 static void common_key_controls(int key)
 {
+    static uint64_t last_us;
+    uint64_t now_us;
+
+    // discard key if received within 100ms of last key
+    now_us = microsec_timer();
+    if (now_us - last_us < 100000) {
+        return;
+    }
+    last_us = now_us;
+
+    // process key
     switch (key) {
     case SDL_EVENT_KEY_LEFT_ARROW:
     case SDL_EVENT_KEY_RIGHT_ARROW:
@@ -581,8 +592,8 @@ static void run_compute_thread(int requested_aperture_idx, int requested_wavelen
 
     if (compute_in_progress) return;
 
-    INFO("requested_aperture_idx=%d  requested_wavelen_nm=%d nm  requested_z_mm=%d mm\n",
-         requested_aperture_idx, requested_wavelen_nm, requested_z_mm);
+    //INFO("requested_aperture_idx=%d  requested_wavelen_nm=%d nm  requested_z_mm=%d mm\n",
+    //     requested_aperture_idx, requested_wavelen_nm, requested_z_mm);
 
     if (requested_aperture_idx != -1) aperture_idx = requested_aperture_idx;
     if (requested_wavelen_nm != -1) wavelen_nm = requested_wavelen_nm;
