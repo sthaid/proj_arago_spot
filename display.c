@@ -11,7 +11,7 @@
 #define SCREEN_ELEMENT_SIZE_MM  (1000 * TOTAL_SIZE / MAX_SCREEN)
 
 #define MIN_Z_MM           0     // these must have values so that z_mm will
-#define MAX_Z_MM           3000  // not exceed the min/max_z bounds
+#define MAX_Z_MM           6000  // not exceed the min/max_z bounds
 #define DELTA_Z_MM         100
 #define INITIAL_Z_MM       2000
 
