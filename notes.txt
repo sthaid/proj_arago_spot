@@ -7,15 +7,6 @@ array([ 0. ,  0.1,  0.2,  0.3,  0.4, -0.5, -0.4, -0.3, -0.2, -0.1])
 >>> y
 array([-0.5, -0.4, -0.3, -0.2, -0.1,  0. ,  0.1,  0.2,  0.3,  0.4])
 
-
-
-cleanup files
-simplify utils
-bring in latest util_sdl.c
-
-
-
-
 ======================================
 REFERENCES
 ======================================
@@ -33,16 +24,6 @@ diameter-of-circular-object  > sqrt(L & wvlen)
     500e-9      1       .0007     .7 mm
     500e-9      2       .001      1  mm
     500e-9      10      .0022     2.2 mm
-
-======================================
-OPTICAL TABLE
-======================================
-
-https://en.wikipedia.org/wiki/Optical_table
-
-optical rail
-optical breadboard
-optical bench
 
 ======================================
 LENSES
@@ -81,18 +62,8 @@ https://www.ebay.com/itm/233715908728?_trkparms=amclksrc%3DITM%26aid%3D1110006%2
 OBSTACLE ...
 ======================================
 
-amazon/google searches:
-- small circular disc
-- small disk magnet
-- pins with round head
-- round head map pins     <=== using this, sphere on a pin, the sphere is about 6mm diameter
-- thumb tack
-
-Wikipedia shows result with a 5.8 mm diameter obstacle.
-
 Some reference sites for obstacles:
 https://www.amazon.com/Star-Diameter-Plastic-Bulletin-boards%EF%BC%88Black%EF%BC%89/dp/B06W56RVT3?ref=dp_atch_dss_sdp_ce&smid=A7YJ5QP9UOEY5_3#
-- https://www.amazon.com/DIYMAG-Refrigerator-Magnets-Industrial-Whiteboard/dp/B07MV6M12H/ref=sr_1_1?crid=22HW77PRI3BCU&keywords=small+disc+magnets&qid=1640705093&sprefix=small+disc+%2Caps%2C134&sr=8-1
 
 ======================================
 SIMULATION  
@@ -114,31 +85,4 @@ https://en.wikipedia.org/wiki/Angular_spectrum_method
 https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.674.3630&rep=rep1&type=pdf
 https://rafael-fuente.github.io/simulating-diffraction-patterns-with-the-angular-spectrum-method-and-python.html
 https://github.com:rafael-fuente/diffractsim
-
-
-======================================
-3D PRINTING ...
-======================================
-
-What is needed:
-- Laser Pointer Mount
-- Lens Holders, for 3", 2" convex, 2" concave, and 1.5"
-- Holder for obstacle
-
-Each should have a common base
-
-
-
-base pieces for lens
-  30 x 40 x 5  and   35 x 40 x 5
-
-platform above these base pieces
-   90 x 24 x 7
-
-uprights
-  10 x 24 x 40    28 up    xxx needs to be taller
-
-  76 x 3 x 50  hollow 25 up
-
-
 
