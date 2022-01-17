@@ -1,9 +1,9 @@
 # Arago Spot
 
 In this project I investigated the Arago Spot, 
-using both a software simulation and optical apparatus.
+using a software simulation and optical apparatus.
 
-[Wikipedia Arago Spot](https://en.wikipedia.org/wiki/Arago_spot#cite_note-8)
+[Wikipedia Arago Spot](https://en.wikipedia.org/wiki/Arago_spot)
 
 ## History
 
