@@ -91,8 +91,7 @@ Controls:
 
 ## Optical Apparatus
 
-The apparatus consists of a laser pointer, a double convex lens and a circular disk. 
-The distance from the circular disk to the screen is 3 meters.
+The apparatus consists of a laser pointer, a double convex lens, a circular disk, and view screen.
 The circular disk is 6 mm diameter map tack pin.
 The lens is double convex 50mm focal length.
 
