@@ -108,9 +108,6 @@ Photos of apparatus:
 ![apparatus](/assets/apparatus.jpg)
 ![disk](/assets/apparatus_disk.jpg)
 
-Photo of screen at 3000 mm:
-![screen at 3000 mm](/assets/apparatus_screen_3000mm.jpg)
-
 Photo of screen at 5800 mm:
 ![screen at 5800 mm](/assets/apparatus_screen_5800mm_a.jpg)
 
