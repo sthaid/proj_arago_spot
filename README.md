@@ -107,7 +107,13 @@ Links to parts:
 Photos of apparatus:
 ![apparatus](/assets/apparatus.jpg)
 ![disk](/assets/apparatus_disk.jpg)
-![screen](/assets/apparatus_screen_3000mm.jpg)
+
+Photos of screen at 3000 mm:
+![screen at 3000 mm](/assets/apparatus_screen_3000mm.jpg)
+
+Photos of screen at 5800 mm:
+![screen at 5800 mm](/assets/apparatus_screen_5800mm_a.jpg)
+![screen at 5800 mm](/assets/apparatus_screen_5800mm_b.jpg)
 
 ## Mounts CAD
 
